@@ -1,0 +1,9 @@
+*.ncb
+*.suo
+*.user
+*.obj
+*.pyc
+Debug
+Release
+*.pdb
+*.idb
