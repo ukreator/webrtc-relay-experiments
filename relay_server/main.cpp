@@ -2,6 +2,9 @@
 #include <websocketpp/server.hpp>
 #include <json/json.h>
 #include <boost/foreach.hpp>
+#include <boost/shared_ptr.hpp>
+#include <boost/make_shared.hpp>
+#include <boost/lexical_cast.hpp>
 #include <iostream>
 #include <set>
 
@@ -15,10 +18,48 @@ using websocketpp::lib::placeholders::_1;
 using websocketpp::lib::placeholders::_2;
 using websocketpp::lib::bind;
 
+class Scope
+{
+public:
+	Scope(const std::string& scopeId): _scopeId(scopeId)
+	{
+		_keyAndSalt = "jJv7OTSY+x5YFIisLr59b5OVIBCrHT+5gK6OZmNd";
+	}
+
+	
+
+//private:
+	std::string _scopeId;
+	std::string _keyAndSalt;
+};
+
+Scope gGlobalScope("1");
+
+
+class User
+{
+public:
+	User(int userId, const std::string& scopeId): _userId(userId), _scopeId(scopeId),
+		_localIceUfrag("2PwlB+YBOsVDyQOa"), _localIcePwd("o1OpQyxdcTf529zMnCuylkqq")
+	{}
+
+//private:
+	int _userId;
+	std::string _scopeId;
+	unsigned _audioSsrc;
+	unsigned _videoSsrc;
+	std::string _localIceUfrag;
+	std::string _localIcePwd;
+	std::string _remoteIceUfrag;
+	std::string _remoteIcePwd;
+};
+
+typedef boost::shared_ptr<User> UserPtr;
+
 class BroadcastServer
 {
 public:
-    BroadcastServer()
+	BroadcastServer(): _ssrcCounter(0)
     {
         //_server.set_access_channels(websocketpp::log::alevel::all);
         //_server.clear_access_channels(websocketpp::log::alevel::frame_payload);
@@ -69,28 +110,77 @@ public:
 		Json::Value result;
 
 		std::string msgType = root["type"].asString();
-		if (msgType == "joinScope")
+		if (msgType == "authRequest")
 		{
-			result["type"] = "newClient";
+			int userId = root["data"]["userId"].asInt();
+			std::string scopeId = root["data"]["scopeId"].asString();
+			UserPtr user = boost::make_shared<User>(userId, scopeId);
+			user->_remoteIceUfrag = root["data"]["iceUfrag"].asString();
+			user->_remoteIcePwd = root["data"]["icePwd"].asString();
+
+			unsigned audioSsrc = newSsrc();
+			unsigned videoSsrc = newSsrc();
+
+			_signalingUsers.insert(std::make_pair(hdl, user));
+			_ssrcUsers.insert(std::make_pair(audioSsrc, user));
+			_ssrcUsers.insert(std::make_pair(videoSsrc, user));
+
+
+			result["type"] = "authResponse";
 			Json::Value data;
-			data["scopeId"] = "1";
-			data["clientId"] = root["data"]["clientId"];
+			data["cryptoKey"] = gGlobalScope._keyAndSalt;
+			data["audioSsrc"] = audioSsrc;
+			data["videoSsrc"] = videoSsrc;
+			data["iceUfrag"] = user->_localIceUfrag;
+			data["icePwd"] = user->_localIcePwd;
+			// foundation component-id protocol priority address port type
+			data["candidate"] = "0 1 UDP 2113667327 192.168.1.33 7000 typ host";
+			data["port"] = "7000"; //< for m= lines
+			data["address"] = "192.168.1.33"; //< for c= lines
+			
+
 			result["data"] = data;
+			sendJson(hdl, result);
 		}
-		else
+		else if (msgType == "iceCandidate")
 		{
-			result = root;
+			// start ICE probing on new candidates
+			/*
+			    var iceCandidate = {
+				  mediaType: mediaType,
+				  ipAddr: ipAddr,
+				  port: port,
+				  foundation: foundation,
+				  priority: priority
+				};
+			*/
+
+			unsigned short port = boost::lexical_cast<unsigned short>(root["data"]["port"].asString());
+			std::string ipAddr = root["data"]["ipAddr"].asString();
+
 		}
 
-		Json::FastWriter writer;
-		std::string resultMsg = writer.write(result);
+		//Json::FastWriter writer;
+		//std::string resultMsg = writer.write(result);
 
-        BOOST_FOREACH (connection_hdl it, _connections)
-        {
-			if (hdl.lock() != it.lock())
-				_server.send(it, resultMsg, websocketpp::frame::opcode::TEXT);
-        }
+  //      BOOST_FOREACH (connection_hdl it, _connections)
+  //      {
+		//	if (hdl.lock() != it.lock())
+		//		_server.send(it, resultMsg, websocketpp::frame::opcode::TEXT);
+  //      }
     }
+
+	void sendJson(connection_hdl hdl, const Json::Value& msg)
+	{
+		Json::FastWriter writer;
+		std::string resultMsg = writer.write(msg);
+		_server.send(hdl, resultMsg, websocketpp::frame::opcode::TEXT);
+	}
+
+	unsigned newSsrc()
+	{
+		return ++_ssrcCounter;
+	}
 
     void run(uint16_t port)
     {
@@ -117,6 +207,12 @@ public:
 private:
     server _server;
     std::set<connection_hdl> _connections;
+	unsigned _ssrcCounter;
+
+	// for SSRC mapping
+	std::map<unsigned, UserPtr> _ssrcUsers;
+	// for signaling connection mapping
+	std::map<connection_hdl, UserPtr> _signalingUsers;
 };
 
 int main()
