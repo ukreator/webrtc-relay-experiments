@@ -130,7 +130,11 @@
         var mgAnswer = new ManageableSDP(offerSdp); //< reuse the offer
         mgAnswer.type = "answer";
         mgAnswer.originator = "addlive 20518 0 IN IP4 " + params.address;
-        //mgAnswer.globalAttributes['msid-semantic'] = 'WMS';
+        mgAnswer.globalAttributes['msid-semantic'] = 'WMS';
+        
+        // comply to http://tools.ietf.org/html/draft-ivov-mmusic-trickle-ice-01
+        mgAnswer.globalAttributes['end-of-candidates'] = "";
+        mgAnswer.globalAttributes['ice-lite'] = "";
         
         mgAnswer.mediaSections[0].port = params.port;
         mgAnswer.mediaSections[1].port = params.port;
@@ -158,8 +162,7 @@
         
         mgAnswer.mediaSections[0].attributes['candidate'] = params.candidate;
         mgAnswer.mediaSections[1].attributes['candidate'] = params.candidate;
-            
-        // msid-semantic?
+       
         mgAnswer.flush();
         var answerSdp = mgAnswer.toRtcSessionDescription();
         log.debug("[PC] = Answer created to feed setRemoteDescription: " + answerSdp.sdp);
@@ -281,14 +284,14 @@
     this.type = rtcSdp.type;
     this.sdp = rtcSdp.sdp;
     this.mediaSections = [];
-    this.globalAttributes = [];
+    this.globalAttributes = {};
     var sdpLines = rtcSdp.sdp.split('\r\n'),
         sdpEntries = [];
 
     for (var i = 0; i < sdpLines.length; i++) {
       sdpEntries.push({key:sdpLines[i][0], value:sdpLines[i].substring(2)});
     }
-    this.globalAttributes = [];
+
     for (i = 0; i < sdpEntries.length; i++) {
       var key = sdpEntries[i].key,
           value = sdpEntries[i].value;
@@ -306,7 +309,9 @@
           this.time = value;
           break;
         case a:
-          this.globalAttributes.push(value);
+          var pattrib = value.split(':');
+          var pvalue = pattrib[1] || "";
+          this.globalAttributes[pattrib[0]] = pvalue;
           break;
         case m:
           var mediaEntry = new SdpMediaSection(sdpEntries, i);
@@ -340,15 +345,24 @@
       return JSON.stringify({sdp:this.sdp, type:this.type});
     },
     flush:function () {
+      var i, k;
       var result = {sdp:''};
       var addEntry = _genAddEntryFunctor(result);
       addEntry(v, 0);
       addEntry(o, this.originator);
       addEntry(s, this.sessionName);
       addEntry(t, this.time);
-      for (var i = 0; i < this.globalAttributes.length; i++) {
-        addEntry(a, this.globalAttributes[i]);
+      
+      for (k in this.globalAttributes) {
+        if (Object.prototype.hasOwnProperty.call(this.globalAttributes, k)) {
+          var attrVal = this.globalAttributes[k];
+          if (attrVal !== "") {
+            attrVal = ":" + attrVal;
+          }
+          addEntry(a, k + attrVal);
+        }
       }
+      
       for (i = 0; i < this.mediaSections.length; i++) {
         this.mediaSections[i].serialize(addEntry);
       }
@@ -356,7 +370,7 @@
     },
     toRtcSessionDescription:function () {
       return new RTCSessionDescription(this);
-    },
+    }/* ,
     removeBundle:function () {
       for (var i = 0; i < this.globalAttributes.length; i++) {
         if (this.globalAttributes[i].indexOf('group:BUNDLE') == 0) {
@@ -364,7 +378,7 @@
           break;
         }
       }
-    }
+    } */
   };
 
   /**
