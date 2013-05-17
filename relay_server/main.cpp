@@ -1,6 +1,9 @@
+#include <UdpServer.hpp>
+
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
 #include <json/json.h>
+#include <stun/usages/ice.h>
 #include <boost/foreach.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/make_shared.hpp>
@@ -155,9 +158,36 @@ public:
 				};
 			*/
 
+			SignalingMap::iterator it = _signalingUsers.find(hdl);
+			if (it == _signalingUsers.end())
+			{
+				LOG_E("Not authenticated user");
+				return;
+			}
+
+			UserPtr user = it->second;
+
 			unsigned short port = boost::lexical_cast<unsigned short>(root["data"]["port"].asString());
 			std::string ipAddr = root["data"]["ipAddr"].asString();
 
+			// - add candidate to candidate list (?)
+			// - create a pair to check with local address:port
+			// - put this pair to check list for a specific user
+			// - sort check list, do ICE operations
+			// - if nominated pair is found, stop ICE operations for specific user
+
+			// UDP server side:
+			// - maintain global remote IP:port mapping to User
+			// - for production: filter off private IP addresses
+			// - get remote endpoint from incoming STUN packet
+			// - find corresponding User
+			// - STUN credentials for packets coming from Chrome:
+			//  - server_ufrag:chrome_ufrag chrome_pass
+			// - for response - same uname and pass, without USERNAME in packet
+
+			// ICE-LITE:
+			// - looks nice (no candidates gathering via STUN and no candidates sending to server)
+			// - problem: how to answer connectivity checks? where to find credentials?
 		}
 
 		//Json::FastWriter writer;
@@ -209,18 +239,24 @@ private:
     std::set<connection_hdl> _connections;
 	unsigned _ssrcCounter;
 
-	// for SSRC mapping
-	std::map<unsigned, UserPtr> _ssrcUsers;
-	// for signaling connection mapping
-	std::map<connection_hdl, UserPtr> _signalingUsers;
+    // for SSRC mapping
+    std::map<unsigned, UserPtr> _ssrcUsers;
+    // for signaling connection mapping
+    typedef std::map<connection_hdl, UserPtr> SignalingMap;
+    SignalingMap _signalingUsers;
 };
 
 int main()
 {
     LOG_D("starting server");
     BroadcastServer server;
+    UdpServer udpServer(boost::asio::ip::address_v4::from_string("192.168.1.33"));
+
     boost::thread thr(bind(&BroadcastServer::run, &server, 10000));
+    udpServer.start(7000);
     
+
+    //udpServer.stop();
     thr.join();
     LOG_D("server finished working");
 

@@ -41,7 +41,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="0"
 				AdditionalIncludeDirectories="&quot;C:\work\boost\include\boost-1_53&quot;;C:\work\builds\websocketpp;..\..\jsoncpp\include;..\..\stun\win32;..\..\stun;..\..\"
-				PreprocessorDefinitions="WIN32;_WIN32;_UNICODE;UNICODE;HAVE_CONFIG_H"
+				PreprocessorDefinitions="WIN32;_WIN32;_UNICODE;UNICODE;HAVE_CONFIG_H;_WIN32_WINNT=0x0601;NOMINMAX"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="1"
@@ -171,6 +171,10 @@
 				RelativePath="..\..\main.cpp"
 				>
 			</File>
+			<File
+				RelativePath="..\..\UdpServer.cpp"
+				>
+			</File>
 			<Filter
 				Name="jsoncpp"
 				>
@@ -253,6 +257,10 @@
 			Filter="h;hpp;hxx;hm;inl;inc;xsd"
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
+			<File
+				RelativePath="..\..\UdpServer.hpp"
+				>
+			</File>
 		</Filter>
 		<Filter
 			Name="Resource Files"
