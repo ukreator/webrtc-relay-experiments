@@ -40,8 +40,8 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="&quot;C:\work\boost\include\boost-1_53&quot;;C:\work\builds\websocketpp;..\..\jsoncpp\include"
-				PreprocessorDefinitions="WIN32;_WIN32;_UNICODE;UNICODE"
+				AdditionalIncludeDirectories="&quot;C:\work\boost\include\boost-1_53&quot;;C:\work\builds\websocketpp;..\..\jsoncpp\include;..\..\stun\win32;..\..\stun;..\..\"
+				PreprocessorDefinitions="WIN32;_WIN32;_UNICODE;UNICODE;HAVE_CONFIG_H"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="1"
@@ -186,6 +186,66 @@
 					RelativePath="..\..\jsoncpp\src\json_writer.cpp"
 					>
 				</File>
+			</Filter>
+			<Filter
+				Name="stun"
+				>
+				<File
+					RelativePath="..\..\stun\debug.c"
+					>
+				</File>
+				<File
+					RelativePath="..\..\stun\md5.c"
+					>
+				</File>
+				<File
+					RelativePath="..\..\stun\rand.c"
+					>
+				</File>
+				<File
+					RelativePath="..\..\stun\sha1.c"
+					>
+				</File>
+				<File
+					RelativePath="..\..\stun\stun5389.c"
+					>
+				</File>
+				<File
+					RelativePath="..\..\stun\stunagent.c"
+					>
+				</File>
+				<File
+					RelativePath="..\..\stun\stuncrc32.c"
+					>
+				</File>
+				<File
+					RelativePath="..\..\stun\stunhmac.c"
+					>
+				</File>
+				<File
+					RelativePath="..\..\stun\stunmessage.c"
+					>
+				</File>
+				<File
+					RelativePath="..\..\stun\utils.c"
+					>
+				</File>
+				<Filter
+					Name="usages"
+					>
+					<File
+						RelativePath="..\..\stun\usages\bind.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\stun\usages\ice.c"
+						>
+					</File>
+					<File
+						RelativePath="..\..\stun\usages\timer.c"
+						>
+					</File>
+				</Filter>
 			</Filter>
 		</Filter>
 		<Filter
