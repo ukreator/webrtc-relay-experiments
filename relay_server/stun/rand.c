@@ -48,7 +48,7 @@
 void RAND_bytes (uint8_t *dst, int len)
 {
   HCRYPTPROV hCryptProv;
-  LPCSTR container = "Libnice key container";
+  LPCTSTR container = TEXT("Libnice key container");
 
   if(!CryptAcquireContext(&hCryptProv, container, NULL, PROV_RSA_FULL, 0)) {
     /* non existing container. try to create a new one */
