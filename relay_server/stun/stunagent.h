@@ -73,6 +73,10 @@ typedef struct stun_agent_t StunAgent;
 #include "stunmessage.h"
 #include "debug.h"
 
+# ifdef __cplusplus
+extern "C" {
+# endif
+
 /**
  * StunCompatibility:
  * @STUN_COMPATIBILITY_RFC3489: Use the STUN specifications compatible with
@@ -512,5 +516,9 @@ bool stun_agent_forget_transaction (StunAgent *agent, StunTransactionId id);
  *
  */
 void stun_agent_set_software (StunAgent *agent, const char *software);
+
+# ifdef __cplusplus
+}
+# endif
 
 #endif /* _STUN_AGENT_H */

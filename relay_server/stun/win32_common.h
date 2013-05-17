@@ -74,9 +74,11 @@ typedef unsigned int size_t;
 typedef unsigned long ssize_t;
 #endif
 
+#ifndef __cplusplus
 typedef uint8_t bool;
 #define true 1
 #define false 0
+#endif
 
 
 #endif /* _WIN32_COMMON_H */
