@@ -227,7 +227,7 @@ stun_usage_ice_conncheck_create_reply (StunAgent *agent, StunMessage *req,
     StunUsageIceCompatibility compatibility)
 {
   const char *username = NULL;
-  uint16_t username_len;
+  /*uint16_t username_len; */
   size_t len = *plen;
   uint64_t q;
   StunMessageReturn val = STUN_MESSAGE_RETURN_SUCCESS;
@@ -307,6 +307,11 @@ stun_usage_ice_conncheck_create_reply (StunAgent *agent, StunMessage *req,
     goto failure;
   }
 
+
+/*
+  FIX: according to RFC 5389 10.1.2:
+  The response MUST NOT contain the USERNAME attribute.
+
   username = (const char *)stun_message_find (req,
       STUN_ATTRIBUTE_USERNAME, &username_len);
   if (username) {
@@ -318,7 +323,7 @@ stun_usage_ice_conncheck_create_reply (StunAgent *agent, StunMessage *req,
     stun_debug ("Error appending username: %d\n", val);
     goto failure;
   }
-
+*/
 
 
   /* the stun agent will automatically use the password of the request */
