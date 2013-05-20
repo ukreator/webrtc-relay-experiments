@@ -142,6 +142,9 @@
         mgAnswer.mediaSections[0].direction = 'recvonly';
         mgAnswer.mediaSections[1].direction = 'recvonly';
         
+        mgAnswer.mediaSections[0].attributes['ice-options'] = 'trickle';
+        mgAnswer.mediaSections[1].attributes['ice-options'] = 'trickle';
+        
         // todo: add to parser
         //mgAnswer.mediaSections[0].attributes['c'] = 'IN IP4 ' + params.address;
         //mgAnswer.mediaSections[1].attributes['c'] = 'IN IP4 ' + params.address;
