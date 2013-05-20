@@ -59,10 +59,11 @@ public:
 
 typedef boost::shared_ptr<User> UserPtr;
 
+
 class BroadcastServer
 {
 public:
-	BroadcastServer(): _ssrcCounter(0)
+	BroadcastServer(): _ssrcCounter(0), _udpServer(0)
     {
         //_server.set_access_channels(websocketpp::log::alevel::all);
         //_server.clear_access_channels(websocketpp::log::alevel::frame_payload);
@@ -71,6 +72,11 @@ public:
         _server.set_open_handler(bind(&BroadcastServer::onOpen,this,::_1));
         _server.set_close_handler(bind(&BroadcastServer::onClose,this,::_1));
         _server.set_message_handler(bind(&BroadcastServer::onMessage,this,::_1,::_2));
+    }
+
+    void setUdpServer(UdpServer* udpServer)
+    {
+        _udpServer = udpServer;
     }
     
     void onOpen(connection_hdl hdl)
@@ -128,6 +134,8 @@ public:
 			_ssrcUsers.insert(std::make_pair(audioSsrc, user));
 			_ssrcUsers.insert(std::make_pair(videoSsrc, user));
 
+            _udpServer->addRecognizedIceUser(user->_localIceUfrag + ":" + user->_remoteIceUfrag,
+                user->_localIcePwd);
 
 			result["type"] = "authResponse";
 			Json::Value data;
@@ -140,7 +148,6 @@ public:
 			data["candidate"] = "0 1 UDP 2113667327 192.168.1.33 7000 typ host";
 			data["port"] = "7000"; //< for m= lines
 			data["address"] = "192.168.1.33"; //< for c= lines
-			
 
 			result["data"] = data;
 			sendJson(hdl, result);
@@ -244,6 +251,7 @@ private:
     // for signaling connection mapping
     typedef std::map<connection_hdl, UserPtr> SignalingMap;
     SignalingMap _signalingUsers;
+    UdpServer* _udpServer;
 };
 
 int main()
@@ -251,7 +259,7 @@ int main()
     LOG_D("starting server");
     BroadcastServer server;
     UdpServer udpServer(boost::asio::ip::address_v4::from_string("192.168.1.33"));
-
+    server.setUdpServer(&udpServer);
     boost::thread thr(bind(&BroadcastServer::run, &server, 10000));
     udpServer.start(7000);
     

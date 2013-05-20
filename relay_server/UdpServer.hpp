@@ -8,8 +8,14 @@
 #include <boost/thread.hpp>
 #include <boost/cstdint.hpp>
 
+#include <set>
+#include <map>
+#include <string>
+
 typedef boost::uint16_t sm_uint16_t;
 typedef boost::uint8_t sm_uint8_t;
+typedef boost::uint64_t sm_uint64_t;
+typedef boost::uint32_t sm_uint32_t;
 
 class UdpServer: boost::noncopyable
 {
@@ -24,7 +30,11 @@ public:
 
     void sendPacket(const sm_uint8_t*, size_t, const boost::asio::ip::udp::endpoint& targetEndpoint);
 
+    void addRecognizedIceUser(const std::string& user, const std::string& pwd);
+
 private:
+
+    void handleStunPacket(const sm_uint8_t* data, size_t size);
 
     void startReceive();
 
@@ -34,6 +44,10 @@ private:
     void stopInternal();
 
     void run();
+
+    static bool validateStunCredentials(StunAgent *agent,
+        StunMessage *message, uint8_t *username, uint16_t usernameLen,
+        uint8_t **password, size_t *passwordLen, void *userData);
 
 
     boost::asio::io_service _ioService;
@@ -46,6 +60,9 @@ private:
     boost::thread _ioServiceThread;
 
     StunAgent _stunAgent;
+    StunAgent _indicationStunAgent;
+    typedef std::map<std::vector<sm_uint8_t>, std::vector<sm_uint8_t> > UserPassMap;
+    UserPassMap _recognizedIceUsers;
 };
 
 
