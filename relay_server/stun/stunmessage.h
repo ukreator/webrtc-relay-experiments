@@ -72,7 +72,12 @@
 
 #include "constants.h"
 
+# ifdef __cplusplus
+extern "C" {
+# endif
+
 typedef struct _StunMessage StunMessage;
+
 
 /**
  * StunClass:
@@ -951,6 +956,10 @@ bool stun_optional (uint16_t t);
  * Returns: A static pointer to a NULL-terminated error message string.
  */
 const char *stun_strerror (StunError code);
+
+# ifdef __cplusplus
+}
+# endif
 
 
 #endif /* _STUN_MESSAGE_H */
