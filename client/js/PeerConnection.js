@@ -1,10 +1,4 @@
-/**
- * Created with PyCharm.
- * User: ted
- * Date: 7/13/12
- * Time: 12:46 PM
- * To change this template use File | Settings | File Templates.
- */
+
 
 (function (w, $) {
   'use strict';
@@ -16,18 +10,25 @@
       URL = w.URL,
       log;
 
+  CA.PeerConnectionType = {
+    PC_TYPE_UPLINK: 'pc_type_uplink',
+    PC_TYPE_DOWNLINK: 'pc_type_downlink'
+  };
+      
 
-  CA.PeerConnection = function (localStream, rendererId) {
+  CA.PeerConnection = function (connectionType, renderingParams) {
     log = w.log;
-    log.debug("[PC] = Creating new PeerConnection");
-    var pc_config = {"iceServers":[
+    log.debug("[PC] = Creating new PeerConnection of type " + connectionType);
+    var pcConfig = {"iceServers":[
       {"url":"stun:stun.l.google.com:19302"}
     ]};
-    var pc_constraints = {"optional":[
+    var pcConstraints = {"optional":[
       {"DtlsSrtpKeyAgreement":false}
     ]};
+    
+    this.connectionType = connectionType;
 
-    this._nativePC = new PeerConnection(pc_config, pc_constraints);
+    this._nativePC = new PeerConnection(pcConfig, pcConstraints);
     this._nativePC.onicecandidate = this._createProxy('_onLocalIceCandidate');
     this._nativePC.oniceconnectionstatechange = this._createProxy('_onIceConnectionStateChange');
     this._nativePC.onconnecting =
@@ -40,9 +41,8 @@
         this._createProxy('_onPeerConnectionStreamRemoved');
     this._nativePC.onstatechanged =
         this._createProxy('_onPeerConnectionStateChanged');
-    this.rendererId = rendererId;
     this._localEndpoints = [];
-    this.localStream = localStream;
+    this.renderingParams = renderingParams;
 
 
     this.state = CA.PeerConnection.ConnectionState.NOT_CONNECTED;
@@ -81,11 +81,14 @@
   CA.PeerConnection.prototype.makeOffer = function (resultH) {
     log.debug("[PC] = Preparing an offer");
     var sdpConstraints = {'mandatory': {
-      'OfferToReceiveAudio': true,
-      'OfferToReceiveVideo': true }};
+      'OfferToReceiveAudio': (this.connectionType == CA.PeerConnectionType.PC_TYPE_DOWNLINK),
+      'OfferToReceiveVideo': (this.connectionType == CA.PeerConnectionType.PC_TYPE_DOWNLINK) }};
 
     var self = this;
-    this._nativePC.addStream(this.localStream);
+    // for uplink connection only
+    if (this.renderingParams.localStream) {
+      this._nativePC.addStream(this.renderingParams.localStream);
+    }
 
     var onOffer = function (sdp) {
       self.state = CA.PeerConnection.ConnectionState.CONNECTING;
@@ -112,6 +115,15 @@
       log.debug("[PC] = Handling auth response");
       var self = this;
       var sdp = self._initialOfferSdp;
+      var offererMode, answererMode;
+      if (this.connectionType == CA.PeerConnectionType.PC_TYPE_UPLINK) {
+        offererMode = 'send';
+        answererMode = 'recvonly';
+      } else {
+        offererMode = 'recvonly';
+        answererMode = 'send';
+      }
+      
       log.debug('Parsing and modifying initial candidateless offer: \r\n' + sdp.sdp);
       var mgSdp = new ManageableSDP(sdp);
       
@@ -119,7 +131,11 @@
       mgSdp.mediaSections[0].crypto.key = params.cryptoKey;
       mgSdp.mediaSections[1].crypto.key = params.cryptoKey;
       mgSdp.mediaSections[0].ssrc = params.audioSsrc;
-      mgSdp.mediaSections[1].ssrc = params.videoSsrc;     
+      mgSdp.mediaSections[1].ssrc = params.videoSsrc;
+      mgSdp.mediaSections[0].attributes['ice-options'] = 'trickle';
+      mgSdp.mediaSections[1].attributes['ice-options'] = 'trickle';
+      mgSdp.mediaSections[0].direction = offererMode;
+      mgSdp.mediaSections[1].direction = offererMode;
       mgSdp.flush();
       var offerSdp = mgSdp.toRtcSessionDescription();
 
@@ -129,26 +145,25 @@
       function onLocalDescriptorSet() {
         var mgAnswer = new ManageableSDP(offerSdp); //< reuse the offer
         mgAnswer.type = "answer";
-        mgAnswer.originator = "addlive 20518 0 IN IP4 " + params.address;
+        mgAnswer.originator = "relay 20518 0 IN IP4 " + params.address;
         mgAnswer.globalAttributes['msid-semantic'] = 'WMS';
         
         // comply to http://tools.ietf.org/html/draft-ivov-mmusic-trickle-ice-01
         mgAnswer.globalAttributes['end-of-candidates'] = "";
         mgAnswer.globalAttributes['ice-lite'] = "";
-        
-        mgAnswer.mediaSections[0].port = params.port;
-        mgAnswer.mediaSections[1].port = params.port;
-               
-        mgAnswer.mediaSections[0].direction = 'recvonly';
-        mgAnswer.mediaSections[1].direction = 'recvonly';
-        
         mgAnswer.mediaSections[0].attributes['ice-options'] = 'trickle';
         mgAnswer.mediaSections[1].attributes['ice-options'] = 'trickle';
-        
+
+        mgAnswer.mediaSections[0].port = params.port;
+        mgAnswer.mediaSections[1].port = params.port;
+
+        mgAnswer.mediaSections[0].direction = answererMode;
+        mgAnswer.mediaSections[1].direction = answererMode;
+
         // todo: add to parser
         //mgAnswer.mediaSections[0].attributes['c'] = 'IN IP4 ' + params.address;
         //mgAnswer.mediaSections[1].attributes['c'] = 'IN IP4 ' + params.address;
-        
+
         mgAnswer.mediaSections[0].ssrcLabels = [];
         mgAnswer.mediaSections[1].ssrcLabels = [];
 
@@ -156,13 +171,13 @@
         mgAnswer.mediaSections[0].rtcp.port = params.port;
         mgAnswer.mediaSections[1].rtcp.addrInfo = 'IN IP4 ' + params.address;
         mgAnswer.mediaSections[1].rtcp.port = params.port;
-        
+
         // common values between a/v for bundled connection
         mgAnswer.mediaSections[0].attributes['ice-ufrag'] = params.iceUfrag;
         mgAnswer.mediaSections[0].attributes['ice-pwd'] = params.icePwd;
         mgAnswer.mediaSections[1].attributes['ice-ufrag'] = params.iceUfrag;
         mgAnswer.mediaSections[1].attributes['ice-pwd'] = params.icePwd;
-        
+
         mgAnswer.mediaSections[0].attributes['candidate'] = params.candidate;
         mgAnswer.mediaSections[1].attributes['candidate'] = params.candidate;
        
@@ -205,7 +220,7 @@
       var port = components[5];
       
       var candidateId = JSON.stringify({ip: ipAddr, port: port});
-      // TODO: check who is 'this' here
+
       if (!this._candidatesMap) this._candidatesMap = {}
       if (!this._candidatesMap[candidateId]) {
         this._candidatesMap[candidateId] = 1;
@@ -216,7 +231,13 @@
       
     } else {
       log.debug("[PC] = ICE candidates gathering finished");
-
+      //var onOffer = function (sdp) {
+      //  log.debug("[PC] = Offer after connection done:\n" + sdp.sdp);
+      //};
+      //var onFailed = function (inf) {
+      //  log.error("[PC] = createOffer failed: " + inf);
+      //};
+      //this._nativePC.createOffer(onOffer, onFailed);
     }
   };
 
@@ -238,8 +259,11 @@
     log.debug("[PC] = PeerConnection Stream Added");
     var stream = e.stream;
     var renderer;
-    renderer = document.getElementById(this.rendererId);
-    renderer.src = URL.createObjectURL(stream);
+    if (this.connectionType == CA.PeerConnectionType.PC_TYPE_DOWNLINK) {
+      log.debug("[PC] = Adding stream from remote peer connection");
+      renderer = document.getElementById(this.renderingParams.rendererId);
+      renderer.src = URL.createObjectURL(stream);
+    }
   };
   //noinspection JSUnusedGlobalSymbols
   CA.PeerConnection.prototype._onPeerConnectionStreamRemoved = function (e) {

@@ -34,7 +34,7 @@ CA = {};
     _initLogging();
     _initUI();
     _initRTTransport();
-    CA.initDevs();
+    CA.initDevs({audio: true, video: true});
   };
 
   CA.join = function () {
@@ -43,20 +43,21 @@ CA = {};
     CA.ownClientId = _genRandomUserId();
     log.debug("[CA] = Generated client id: " + CA.ownClientId);
     
-    var clientPC =
-        new CA.PeerConnection(CA.selectedDevsSet, 'remoteVideoRenderer');
+    var uplinkConnection =
+        new CA.PeerConnection(CA.PeerConnectionType.PC_TYPE_UPLINK, {localStream: CA.selectedDevsSet});
+        
+//    var downlinkConnection =
+//        new CA.PeerConnection(CA.PeerConnectionType.PC_TYPE_DOWNLINK, {rendererId: 'remoteVideoRenderer'});
 
-    clientPC.setSignalingTransportHandler(CA.RealtimeTransport);
+    uplinkConnection.setSignalingTransportHandler(CA.RealtimeTransport);
 
     var onOffer = function (iceUfrag, icePwd) {
       CA.RealtimeTransport.authRequest(CA.ownClientId, scopeId, iceUfrag, icePwd);
     };
     
     // this will trigger ICE discovery:
-    clientPC.makeOffer(onOffer);
-    CA.clientPC = clientPC;
-    //clients[clientId] = clientPC;
-    
+    uplinkConnection.makeOffer(onOffer);
+    CA.uplinkConnection = uplinkConnection;
     CA.joinedScope = scopeId;
   };
 
@@ -79,17 +80,10 @@ CA = {};
 
 
   function _onAuthResponse(data) {
-  
     log.debug("Got auth response: " + JSON.stringify(data));
-    
-    // create offer
-    // replace crypto keys and ssrsc
-    // call setLocalDescription()
-    // start ICE discovery
-    // create answer manually from remote data (try ICE-LITE)
-    // call setRemoteDescription
-  
-    CA.clientPC.handleAuthResponse(data); 
+    CA.uplinkConnection.handleAuthResponse(data);
+    // TODO: get already connected clients from authResponse
+    // and create downlink connection for each one
   }
 
 
@@ -99,6 +93,7 @@ CA = {};
 
 
   function _onClientLeft(clientId) {
+  /*
     log.debug("[CA] = Got client left " + clientId);
     var clientPC = clients[clientId];
     if (clientPC) {
@@ -106,6 +101,7 @@ CA = {};
     } else {
       log.warn("[CA] = Got client left for unknown client");
     }
+    */
   }
 
   /**

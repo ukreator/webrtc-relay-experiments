@@ -25,7 +25,7 @@
   CA.previewStarted = false;
   CA.audioPlayoutStarted = false;
 
-  CA.initDevs = function () {
+  CA.initDevs = function (publishStatus) {
     log.debug("Initializing the device ctrl");
     var onSucc = function (stream) {
       log.debug("Starting local preview");
@@ -44,7 +44,7 @@
     var onErr = function () {
       log.error("Failed to get a device");
     };
-    navigator.getUserMedia({audio:false,video:true}, onSucc, onErr);
+    navigator.getUserMedia({audio: publishStatus.audio, video: publishStatus.video}, onSucc, onErr);
 
   };
 
