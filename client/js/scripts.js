@@ -45,9 +45,6 @@ CA = {};
     
     var uplinkConnection =
         new CA.PeerConnection(CA.PeerConnectionType.PC_TYPE_UPLINK, {localStream: CA.selectedDevsSet});
-        
-//    var downlinkConnection =
-//        new CA.PeerConnection(CA.PeerConnectionType.PC_TYPE_DOWNLINK, {rendererId: 'remoteVideoRenderer'});
 
     uplinkConnection.setSignalingTransportHandler(CA.RealtimeTransport);
 
@@ -58,6 +55,7 @@ CA = {};
     // this will trigger ICE discovery:
     uplinkConnection.makeOffer(onOffer);
     CA.uplinkConnection = uplinkConnection;
+    CA.downlinkConnections = {};
     CA.joinedScope = scopeId;
   };
 
@@ -81,27 +79,25 @@ CA = {};
 
   function _onAuthResponse(data) {
     log.debug("Got auth response: " + JSON.stringify(data));
-    CA.uplinkConnection.handleAuthResponse(data);
-    // TODO: get already connected clients from authResponse
-    // and create downlink connection for each one
+    CA.uplinkConnection.handleStreamerAnswer(data);
   }
 
 
-  function _onPeerMsg(msg) {
-
-  }
-
-
-  function _onClientLeft(clientId) {
-  /*
-    log.debug("[CA] = Got client left " + clientId);
-    var clientPC = clients[clientId];
-    if (clientPC) {
-      clientPC.close();
-    } else {
-      log.warn("[CA] = Got client left for unknown client");
+  function _onUserEvent(uevent) {
+    log.debug('Got user event: ' + JSON.stringify(uevent));
+    if (uevent.eventType == CA.UserEventTypes.NEW_USER) {
+      // todo: assign new renderer for each new user
+      var downlinkConnection =
+          new CA.PeerConnection(CA.PeerConnectionType.PC_TYPE_DOWNLINK, {rendererId: 'remoteVideoRenderer'});
+      downlinkConnection.setSignalingTransportHandler(CA.RealtimeTransport);
+      var onOffer = function (iceUfrag, icePwd) {
+        CA.RealtimeTransport.newDownlinkConnection(iceUfrag, icePwd);
+      };
+      downlinkConnection.makeOffer(onOffer);
+      downlinkConnections[uevent.userId] = downlinkConnection;
+    } else if (uevent.eventType == CA.UserEventTypes.DOWNLINK_CONNECTION_ANSWER) {
+      CA.downlinkConnections[uevent.userId].handleStreamerAnswer(uevent);
     }
-    */
   }
 
   /**
@@ -134,8 +130,7 @@ CA = {};
       CA.RealtimeTransport.setMsgListener(
           {
             onAuthResponse:_onAuthResponse,
-            onClientLeft:_onClientLeft,
-            onPeerMsg:_onPeerMsg
+            onUserEvent:_onUserEvent
           }
       );
     }, 1000);

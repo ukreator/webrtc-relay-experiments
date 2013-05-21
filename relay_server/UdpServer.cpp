@@ -35,8 +35,6 @@ UdpServer::UdpServer(const boost::asio::ip::address& listeningAddr):
         | STUN_AGENT_USAGE_NO_INDICATION_AUTH);
     stun_agent_init(&_stunAgent, STUN_ALL_KNOWN_ATTRIBUTES, STUN_COMPATIBILITY_RFC5389,
         flags);
-
-
 }
 
 UdpServer::~UdpServer()
@@ -103,6 +101,10 @@ void UdpServer::addRecognizedIceUser(const std::string& user, const std::string&
     _recognizedIceUsers.insert(std::make_pair(uname, passwd));
 }
 
+void UdpServer::removeRecognizedIceUser(const std::string& user)
+{
+    _recognizedIceUsers.erase(std::vector<sm_uint8_t>(user.begin(), user.end()));
+}
 
 bool UdpServer::validateStunCredentials(StunAgent *agent,
     StunMessage *message, uint8_t *username, uint16_t usernameLen,

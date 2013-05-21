@@ -111,7 +111,7 @@
     this._nativePC.createOffer(onOffer, onOfferFailed, sdpConstraints);
   };
 
-  CA.PeerConnection.prototype.handleAuthResponse = function (params, resultHandler) {
+  CA.PeerConnection.prototype.handleStreamerAnswer = function (params) {
       log.debug("[PC] = Handling auth response");
       var self = this;
       var sdp = self._initialOfferSdp;

@@ -64,8 +64,19 @@
       iceUfrag: iceUfrag,
       icePwd: icePwd
     };
-    log.debug('Sending auth request');
+    log.debug('[RT] = Sending auth request');
     socket.emit(CA.MessageType.AUTH_REQUEST,
+      authRequest);
+  };
+  
+  CA.RealtimeTransport.newDownlinkConnection = function (iceUfrag, icePwd) {
+    var request = {
+      eventType: 'startNewDownlink',
+      iceUfrag: iceUfrag,
+      icePwd: icePwd
+    };
+    log.debug('[RT] = Sending request to start new downlink connection');
+    socket.emit(CA.MessageType.USER_EVENT,
       authRequest);
   };
   
@@ -77,29 +88,11 @@
       foundation: foundation,
       priority: priority
     };
-    log.debug('Sending ICE candidate');
+    log.debug('[RT] = Sending ICE candidate');
     socket.emit(CA.MessageType.ICE_CANDIDATE,
       iceCandidate);
   };
   
-  /*
-  CA.RealtimeTransport.joinScope = function (scopeId, clientId) {
-    log.debug("[RT] = Joining scope with id: " + scopeId);
-    socket.emit('joinScope', {scopeId:scopeId, clientId:clientId});
-  };
-
-  CA.RealtimeTransport.leaveScope = function (scopeId) {
-    log.debug("[RT] = Leaving scope with id: " + scopeId);
-    socket.emit('leaveScope', scopeId);
-  };
-
-  CA.RealtimeTransport.emitPeerMsg = function (msg) {
-    log.debug("[RT] = Emitting peer message in scope: " + msg.scopeId
-        + ' for user with id: ' + msg.recipientId);
-    socket.emit('peerMsg', msg);
-  };
-  
-  */
 
   /**
    * ===================================================================
@@ -114,8 +107,8 @@
     msgListener.onClientLeft(data);
   }
 
-  function _onPeerMsg(msg) {
-    msgListener.onPeerMsg(msg);
+  function _onUserEvent(msg) {
+    msgListener.onUserEvent(msg);
   }
 
 
@@ -126,12 +119,9 @@
       case CA.MessageType.AUTH_RESPONSE:
         h = _onAuthResponse;
         break;
-      //case 'clientLeft':
-      //  h = _onClientLeft;
-      //  break;
-      //case 'peerMsg':
-      //  h = _onPeerMsg;
-      //  break;
+      case CA.MessageType.USER_EVENT:
+        h = _onUserEvent;
+        break;
       default:
         log.error('Message type ' + serverMessage.type + ' is unknown');
         return;
@@ -139,21 +129,16 @@
     h(serverMessage.data);
   }
 
-  /*
-  CA.PeerMessage = function (scopeId, senderId, recipientId, type, data) {
-    this.scopeId = scopeId;
-    this.senderId = senderId;
-    this.recipientId = recipientId;
-    this.type = type;
-    this.data = data;
-  };
-  */
-
   CA.MessageType = {
     AUTH_REQUEST:'authRequest',
     AUTH_RESPONSE:'authResponse',
-    ICE_CANDIDATE:'iceCandidate'
+    ICE_CANDIDATE:'iceCandidate',
+    USER_EVENT: 'userEvent'
   };
 
+  CA.UserEventTypes = {
+    NEW_USER: 'newUser',
+    DOWNLINK_CONNECTION_ANSWER: 'downlinkConnectionAnswer'
+  };
 
 }(window, jQuery));

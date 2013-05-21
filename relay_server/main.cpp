@@ -38,6 +38,27 @@ public:
 
 Scope gGlobalScope("1");
 
+/*
+ * Generates a stream of octets containing only characters
+ * with ASCII codecs of 0x41-5A (A-Z), 0x61-7A (a-z), 
+ * 0x30-39 (0-9), 0x2b (+) and 0x2f (/). This matches 
+ * the definition of 'ice-char' in ICE Ispecification,
+ * section 15.1 (ID-16).
+ * NOTE: modeled after nice_rng_generate_bytes_print() from libnice.
+ */
+std::string generatePrintableBytes(size_t size, std::vector<sm_uint8_t>* outBuf,
+                                   boost::function<size_t(size_t, size_t)> randomFun)
+{
+    outBuf.resize(size);
+    const char chars[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "abcdefghijklmnopqrstuvwxyz"
+        "0123456789"
+        "+/";
+    size_t len = sizeof(chars);
+    for (size_t i = 0; i < len; ++i)
+      (*outBuf)[i] = chars[randomFun(0, len)];
+}
 
 class User
 {
@@ -55,6 +76,21 @@ public:
 	std::string _localIcePwd;
 	std::string _remoteIceUfrag;
 	std::string _remoteIcePwd;
+
+    class IceCredentials
+    {
+    public:
+        IceCredentials()
+        {
+            generatePrintableBytes(NICE_STREAM_DEF_UFRAG - 1, &_localUfrag);
+            generatePrintableBytes(NICE_STREAM_DEF_PWD - 1, &_localPwd);
+        }
+    private:
+        std::vector<sm_uint8_t> _localUfrag;
+        std::vector<sm_uint8_t> _localPwd;
+        std::string _remoteUfrag;
+        std::string _remotePwd;
+    };
 };
 
 typedef boost::shared_ptr<User> UserPtr;
@@ -69,9 +105,9 @@ public:
         //_server.clear_access_channels(websocketpp::log::alevel::frame_payload);
         _server.init_asio();
                 
-        _server.set_open_handler(bind(&BroadcastServer::onOpen,this,::_1));
-        _server.set_close_handler(bind(&BroadcastServer::onClose,this,::_1));
-        _server.set_message_handler(bind(&BroadcastServer::onMessage,this,::_1,::_2));
+        _server.set_open_handler(bind(&BroadcastServer::onOpen, this, ::_1));
+        _server.set_close_handler(bind(&BroadcastServer::onClose, this, ::_1));
+        _server.set_message_handler(bind(&BroadcastServer::onMessage, this, ::_1,::_2));
     }
 
     void setUdpServer(UdpServer* udpServer)
@@ -88,23 +124,32 @@ public:
     void onClose(connection_hdl hdl)
     {
         _connections.erase(hdl);
+        
+    	UserPtr user = getUserByConnection(hdl);
+        if (user)
+        {
+            LOG_D("Cleaning ICE and SSRC mappings");
+            _udpServer->removeRecognizedIceUser(user->_localIceUfrag + ":" + user->_remoteIceUfrag);
+            _ssrcUsers.erase(user->_audioSsrc);
+            _ssrcUsers.erase(user->_videoSsrc);
+        }
+        
         LOG_D("Connection closed");
+    }
+
+    void reportConnectedUser(connection_hdl hdl, UserPtr user)
+    {
+        Json::Value uevent;
+        Json::Value data;
+        uevent["type"] = "userEvent";
+        data["eventType"] = "newUser";
+
+        uevent["data"] = data;
+        sendJson(hdl, uevent);
     }
     
     void onMessage(connection_hdl hdl, server::message_ptr msg)
     {
-		// 1. auth message handling, get client ID, return
-		//  -- crypto keys
-		//  -- SSRCs
-		//  -- ICE credentials
-		//  -- ICE candidate
-		// 2. Generate answer on JS client side based on info from auth response
-		// 3. create SDP offer on client, get needed info from it, replace some attributes
-		// - consume and analyze offer (in JSON, not SDP):
-		//  -- SSRCs
-		//  -- audio/video published status
-		//  -- ICE credentials
-		// - wait for candidates, put them in map or send to libnice
         LOG_D("Got message: " << msg->get_payload());
 
 		Json::Reader reader;
@@ -151,50 +196,36 @@ public:
 
 			result["data"] = data;
 			sendJson(hdl, result);
+
+            // notify other clients about current user connected
+            BOOST_FOREACH(SignalingMap::value_type& userPair, _signalingUsers)
+            {
+                if (userPair.first.lock().get() != hdl.lock().get())
+                    reportConnectedUser(userPair.first, user);
+            }
+
+            // send info about users already present in current room to this user
+            BOOST_FOREACH(SignalingMap::value_type& userPair, _signalingUsers)
+            {
+                if (userPair.first.lock().get() != hdl.lock().get())
+                    reportConnectedUser(hdl, userPair.second);
+            }
 		}
+        else if (msgType == "startNewDownlink")
+        {
+            UserPtr user = getUserByConnection(hdl);
+            if (!user)
+            {
+                LOG_E("User not authenticated");
+                return;
+            }
+			user->_remoteIceUfrag = root["data"]["iceUfrag"].asString();
+			user->_remoteIcePwd = root["data"]["icePwd"].asString();
+        }
 		else if (msgType == "iceCandidate")
 		{
-			// start ICE probing on new candidates
-			/*
-			    var iceCandidate = {
-				  mediaType: mediaType,
-				  ipAddr: ipAddr,
-				  port: port,
-				  foundation: foundation,
-				  priority: priority
-				};
-			*/
-
-			SignalingMap::iterator it = _signalingUsers.find(hdl);
-			if (it == _signalingUsers.end())
-			{
-				LOG_E("Not authenticated user");
-				return;
-			}
-
-			UserPtr user = it->second;
-
-			unsigned short port = boost::lexical_cast<unsigned short>(root["data"]["port"].asString());
-			std::string ipAddr = root["data"]["ipAddr"].asString();
-
-			// - add candidate to candidate list (?)
-			// - create a pair to check with local address:port
-			// - put this pair to check list for a specific user
-			// - sort check list, do ICE operations
-			// - if nominated pair is found, stop ICE operations for specific user
-
-			// UDP server side:
-			// - maintain global remote IP:port mapping to User
-			// - for production: filter off private IP addresses
-			// - get remote endpoint from incoming STUN packet
-			// - find corresponding User
-			// - STUN credentials for packets coming from Chrome:
-			//  - server_ufrag:chrome_ufrag chrome_pass
-			// - for response - same uname and pass, without USERNAME in packet
-
-			// ICE-LITE:
-			// - looks nice (no candidates gathering via STUN and no candidates sending to server)
-			// - problem: how to answer connectivity checks? where to find credentials?
+            //unsigned short port = boost::lexical_cast<unsigned short>(root["data"]["port"].asString());
+            //std::string ipAddr = root["data"]["ipAddr"].asString();
 		}
 
 		//Json::FastWriter writer;
@@ -218,6 +249,17 @@ public:
 	{
 		return ++_ssrcCounter;
 	}
+
+    UserPtr getUserByConnection(connection_hdl hdl)
+    {
+        SignalingMap::iterator it = _signalingUsers.find(hdl);
+        if (it == _signalingUsers.end())
+        {
+            return UserPtr();
+        }
+
+        return it->second;
+    }
 
     void run(uint16_t port)
     {

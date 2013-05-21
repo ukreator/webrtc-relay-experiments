@@ -32,6 +32,8 @@ public:
 
     void addRecognizedIceUser(const std::string& user, const std::string& pwd);
 
+    void removeRecognizedIceUser(const std::string& user);
+
 private:
 
     void handleStunPacket(const sm_uint8_t* data, size_t size);
@@ -60,7 +62,6 @@ private:
     boost::thread _ioServiceThread;
 
     StunAgent _stunAgent;
-    StunAgent _indicationStunAgent;
     typedef std::map<std::vector<sm_uint8_t>, std::vector<sm_uint8_t> > UserPassMap;
     UserPassMap _recognizedIceUsers;
 };
