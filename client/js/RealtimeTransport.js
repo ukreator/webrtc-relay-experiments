@@ -69,15 +69,16 @@
       authRequest);
   };
   
-  CA.RealtimeTransport.newDownlinkConnection = function (iceUfrag, icePwd) {
+  CA.RealtimeTransport.newDownlinkConnection = function (userId, iceUfrag, icePwd) {
     var request = {
       eventType: 'startNewDownlink',
+      userId: userId,
       iceUfrag: iceUfrag,
       icePwd: icePwd
     };
-    log.debug('[RT] = Sending request to start new downlink connection');
+    log.debug('[RT] = Sending request to start new downlink connection: ' + request);
     socket.emit(CA.MessageType.USER_EVENT,
-      authRequest);
+      request);
   };
   
   CA.RealtimeTransport.sendIceCandidate = function (mediaType, foundation, priority, ipAddr, port) {

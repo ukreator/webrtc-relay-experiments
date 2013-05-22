@@ -1,11 +1,8 @@
 #include <UdpServer.hpp>
+#include <Log.hpp>
 #include <boost/foreach.hpp>
 
 
-#define LOG_D(x) std::cout << "[DEBUG] " << x << std::endl
-#define LOG_E(x) std::cout << "[ERROR] " << x << std::endl
-#define LOG_I(x) std::cout << "[ INFO] " << x << std::endl
-#define LOG_W(x) std::cout << "[ WARN] " << x << std::endl
 
 namespace
 {
@@ -94,16 +91,36 @@ void UdpServer::startReceive()
             boost::asio::placeholders::bytes_transferred));
 }
 
-void UdpServer::addRecognizedIceUser(const std::string& user, const std::string& pwd)
+void UdpServer::addRecognizedIceUser(const std::vector<sm_uint8_t>& uname, const std::vector<sm_uint8_t>& pwd)
 {
-    std::vector<sm_uint8_t> uname(user.begin(), user.end());
-    std::vector<sm_uint8_t> passwd(pwd.begin(), pwd.end());
-    _recognizedIceUsers.insert(std::make_pair(uname, passwd));
+    _recognizedIceUsers.insert(std::make_pair(uname, pwd));
 }
 
-void UdpServer::removeRecognizedIceUser(const std::string& user)
+void UdpServer::removeRecognizedIceUser(const std::vector<sm_uint8_t>& user)
 {
-    _recognizedIceUsers.erase(std::vector<sm_uint8_t>(user.begin(), user.end()));
+    _recognizedIceUsers.erase(user);
+}
+
+void UdpServer::addUser(UserPtr user)
+{
+    _ssrcUsers.insert(std::make_pair(user->_audioSsrc, user));
+    _ssrcUsers.insert(std::make_pair(user->_videoSsrc, user));
+
+    _recognizedIceUsers.insert(std::make_pair(user->_uplinkIceCreds.verifyingUname(),
+        user->_uplinkIceCreds.verifyingPwd()));
+}
+
+void UdpServer::removeUser(UserPtr user)
+{
+    _ssrcUsers.erase(user->_audioSsrc);
+    _ssrcUsers.erase(user->_videoSsrc);
+    _recognizedIceUsers.erase(user->_uplinkIceCreds.verifyingUname());
+    // remove downlink ICE credentials:
+    BOOST_FOREACH(User::DownlinkIceCredentials::value_type& v,
+        user->_downlinkIceCredentials)
+    {
+        _recognizedIceUsers.erase(v.second->verifyingUname());
+    }
 }
 
 bool UdpServer::validateStunCredentials(StunAgent *agent,
@@ -160,17 +177,43 @@ void UdpServer::handleReceive(const boost::system::error_code& error,
         return;
     }
 
+    bool shouldBroadcast = false;
     const sm_uint8_t* data = (const sm_uint8_t*)_recvBuffer.data();
     if (isStun(data, size))
     {
         handleStunPacket(data, size);
     }
+    //else if (isRtcp(data, size))
+    //{
+    //    broadcast = handleRtcpPacket(data, size);
+    //}
     else
     {
-        // todo: RTP handling
+        shouldBroadcast = true;
     }
 
+    if (shouldBroadcast)
+        broadcast(data, size);
+
+    // TODO: think how to handle ROC incremented before new user connected
+    // and received media stream. Is it possible to extract ROC from incoming RTP,
+    // save it in User and distribute along with new downlink connection establishment event
+
     startReceive();
+}
+
+void UdpServer::broadcast(const sm_uint8_t* data, size_t size)
+{
+    // - get SSRC from data
+    // - get User by ssrc
+    // - redirect to Scope which maintains list of connected users
+    // - add immutable Endpoint class
+    // - add uplink and downlink endpoints to User
+}
+
+bool UdpServer::handleRtcpPacket(const sm_uint8_t* data, size_t size)
+{
+    return false;
 }
 
 void UdpServer::handleStunPacket(const sm_uint8_t* data, size_t size)

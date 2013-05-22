@@ -175,6 +175,14 @@
 				RelativePath="..\..\UdpServer.cpp"
 				>
 			</File>
+			<File
+				RelativePath="..\..\User.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\WebRtcRelayUtils.cpp"
+				>
+			</File>
 			<Filter
 				Name="jsoncpp"
 				>
@@ -258,7 +266,27 @@
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
 			<File
+				RelativePath="..\..\IceCredentials.hpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\IntTypes.hpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\Log.hpp"
+				>
+			</File>
+			<File
 				RelativePath="..\..\UdpServer.hpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\User.hpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\WebRtcRelayUtils.hpp"
 				>
 			</File>
 		</Filter>

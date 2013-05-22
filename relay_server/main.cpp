@@ -1,18 +1,18 @@
 #include <UdpServer.hpp>
+#include <User.hpp>
+#include <IceCredentials.hpp>
+#include <Log.hpp>
 
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
 #include <json/json.h>
-#include <stun/usages/ice.h>
 #include <boost/foreach.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/make_shared.hpp>
 #include <boost/lexical_cast.hpp>
+#include <boost/random/mersenne_twister.hpp>
 #include <iostream>
 #include <set>
-
-#define LOG_D(x) std::cout << x << std::endl
-#define LOG_E(x) LOG_D(x)
 
 typedef websocketpp::server<websocketpp::config::asio> server;
 
@@ -38,68 +38,12 @@ public:
 
 Scope gGlobalScope("1");
 
-/*
- * Generates a stream of octets containing only characters
- * with ASCII codecs of 0x41-5A (A-Z), 0x61-7A (a-z), 
- * 0x30-39 (0-9), 0x2b (+) and 0x2f (/). This matches 
- * the definition of 'ice-char' in ICE Ispecification,
- * section 15.1 (ID-16).
- * NOTE: modeled after nice_rng_generate_bytes_print() from libnice.
- */
-std::string generatePrintableBytes(size_t size, std::vector<sm_uint8_t>* outBuf,
-                                   boost::function<size_t(size_t, size_t)> randomFun)
-{
-    outBuf.resize(size);
-    const char chars[] =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "abcdefghijklmnopqrstuvwxyz"
-        "0123456789"
-        "+/";
-    size_t len = sizeof(chars);
-    for (size_t i = 0; i < len; ++i)
-      (*outBuf)[i] = chars[randomFun(0, len)];
-}
-
-class User
-{
-public:
-	User(int userId, const std::string& scopeId): _userId(userId), _scopeId(scopeId),
-		_localIceUfrag("2PwlB+YBOsVDyQOa"), _localIcePwd("o1OpQyxdcTf529zMnCuylkqq")
-	{}
-
-//private:
-	int _userId;
-	std::string _scopeId;
-	unsigned _audioSsrc;
-	unsigned _videoSsrc;
-	std::string _localIceUfrag;
-	std::string _localIcePwd;
-	std::string _remoteIceUfrag;
-	std::string _remoteIcePwd;
-
-    class IceCredentials
-    {
-    public:
-        IceCredentials()
-        {
-            generatePrintableBytes(NICE_STREAM_DEF_UFRAG - 1, &_localUfrag);
-            generatePrintableBytes(NICE_STREAM_DEF_PWD - 1, &_localPwd);
-        }
-    private:
-        std::vector<sm_uint8_t> _localUfrag;
-        std::vector<sm_uint8_t> _localPwd;
-        std::string _remoteUfrag;
-        std::string _remotePwd;
-    };
-};
-
-typedef boost::shared_ptr<User> UserPtr;
-
 
 class BroadcastServer
 {
 public:
-	BroadcastServer(): _ssrcCounter(0), _udpServer(0)
+	BroadcastServer(): _ssrcCounter(0), _udpServer(0),
+        _randomGenerator(sm_uint32_t(std::time(0)))
     {
         //_server.set_access_channels(websocketpp::log::alevel::all);
         //_server.clear_access_channels(websocketpp::log::alevel::frame_payload);
@@ -129,9 +73,7 @@ public:
         if (user)
         {
             LOG_D("Cleaning ICE and SSRC mappings");
-            _udpServer->removeRecognizedIceUser(user->_localIceUfrag + ":" + user->_remoteIceUfrag);
-            _ssrcUsers.erase(user->_audioSsrc);
-            _ssrcUsers.erase(user->_videoSsrc);
+            _udpServer->removeUser(user);
         }
         
         LOG_D("Connection closed");
@@ -143,6 +85,7 @@ public:
         Json::Value data;
         uevent["type"] = "userEvent";
         data["eventType"] = "newUser";
+        data["userId"] = user->_userId;
 
         uevent["data"] = data;
         sendJson(hdl, uevent);
@@ -162,33 +105,35 @@ public:
 		}
 
 		Json::Value result;
-
 		std::string msgType = root["type"].asString();
+        Json::Value params = root["data"];
+
 		if (msgType == "authRequest")
 		{
-			int userId = root["data"]["userId"].asInt();
-			std::string scopeId = root["data"]["scopeId"].asString();
-			UserPtr user = boost::make_shared<User>(userId, scopeId);
-			user->_remoteIceUfrag = root["data"]["iceUfrag"].asString();
-			user->_remoteIcePwd = root["data"]["icePwd"].asString();
+			int userId = params["userId"].asInt();
+			std::string scopeId = params["scopeId"].asString();
 
-			unsigned audioSsrc = newSsrc();
-			unsigned videoSsrc = newSsrc();
+            IceCredentials iceCreds(_randomGenerator);
+			iceCreds.setRemoteCredentials(params["iceUfrag"].asString(),
+                params["icePwd"].asString());
+            UserPtr user = boost::make_shared<User>(userId, scopeId, iceCreds);
+
+            user->_audioSsrc = newSsrc();
+            user->_videoSsrc = newSsrc();
 
 			_signalingUsers.insert(std::make_pair(hdl, user));
-			_ssrcUsers.insert(std::make_pair(audioSsrc, user));
-			_ssrcUsers.insert(std::make_pair(videoSsrc, user));
 
-            _udpServer->addRecognizedIceUser(user->_localIceUfrag + ":" + user->_remoteIceUfrag,
-                user->_localIcePwd);
+            _udpServer->addUser(user);
+            //_udpServer->addRecognizedIceUser(iceCreds.verifyingUname(),
+            //    iceCreds.verifyingPwd());
 
 			result["type"] = "authResponse";
 			Json::Value data;
 			data["cryptoKey"] = gGlobalScope._keyAndSalt;
-			data["audioSsrc"] = audioSsrc;
-			data["videoSsrc"] = videoSsrc;
-			data["iceUfrag"] = user->_localIceUfrag;
-			data["icePwd"] = user->_localIcePwd;
+			data["audioSsrc"] = user->_audioSsrc;
+			data["videoSsrc"] = user->_videoSsrc;
+			data["iceUfrag"] = iceCreds.localUfrag();
+			data["icePwd"] = iceCreds.localPwd();
 			// foundation component-id protocol priority address port type
 			data["candidate"] = "0 1 UDP 2113667327 192.168.1.33 7000 typ host";
 			data["port"] = "7000"; //< for m= lines
@@ -205,37 +150,71 @@ public:
             }
 
             // send info about users already present in current room to this user
-            BOOST_FOREACH(SignalingMap::value_type& userPair, _signalingUsers)
-            {
-                if (userPair.first.lock().get() != hdl.lock().get())
-                    reportConnectedUser(hdl, userPair.second);
-            }
+            //BOOST_FOREACH(SignalingMap::value_type& userPair, _signalingUsers)
+            //{
+            //    if (userPair.first.lock().get() != hdl.lock().get())
+            //        reportConnectedUser(hdl, userPair.second);
+            //}
 		}
-        else if (msgType == "startNewDownlink")
+        else if (msgType == "userEvent")
         {
-            UserPtr user = getUserByConnection(hdl);
-            if (!user)
+            if (params["eventType"] == "startNewDownlink")
             {
-                LOG_E("User not authenticated");
-                return;
+                UserPtr user = getUserByConnection(hdl);
+                if (!user)
+                {
+                    LOG_E("User not authenticated");
+                    return;
+                }
+
+                IceCredentialsPtr iceCreds = boost::make_shared<IceCredentials>(boost::ref(_randomGenerator));
+			    iceCreds->setRemoteCredentials(params["iceUfrag"].asString(),
+                    params["icePwd"].asString());
+                int userId = params["userId"].asInt();
+
+                user->_downlinkIceCredentials[userId] = iceCreds;
+                _udpServer->addRecognizedIceUser(iceCreds->verifyingUname(),
+                    iceCreds->verifyingPwd());
+
+                // TODO: save and set in JS SSRCs for RTCP RR and feedback packets
+			    unsigned audioSsrc = newSsrc();
+			    unsigned videoSsrc = newSsrc();
+			    //_ssrcUsers.insert(std::make_pair(audioSsrc, user));
+			    //_ssrcUsers.insert(std::make_pair(videoSsrc, user));
+
+			    result["type"] = "userEvent";
+			    Json::Value data;
+                data["eventType"] = "downlinkConnectionAnswer";
+                data["userId"] = userId;
+			    data["cryptoKey"] = gGlobalScope._keyAndSalt;
+			    data["audioSsrc"] = audioSsrc;
+			    data["videoSsrc"] = videoSsrc;
+			    data["iceUfrag"] = iceCreds->localUfrag();
+			    data["icePwd"] = iceCreds->localPwd();
+			    // foundation component-id protocol priority address port type
+			    data["candidate"] = "0 1 UDP 2113667327 192.168.1.33 7000 typ host";
+			    data["port"] = "7000"; //< for m= lines
+			    data["address"] = "192.168.1.33"; //< for c= lines
+
+			    result["data"] = data;
+			    sendJson(hdl, result);
             }
-			user->_remoteIceUfrag = root["data"]["iceUfrag"].asString();
-			user->_remoteIcePwd = root["data"]["icePwd"].asString();
+            else
+            {
+                LOG_E("Unknown user event");
+                assert(false);
+            }
         }
 		else if (msgType == "iceCandidate")
 		{
             //unsigned short port = boost::lexical_cast<unsigned short>(root["data"]["port"].asString());
             //std::string ipAddr = root["data"]["ipAddr"].asString();
 		}
-
-		//Json::FastWriter writer;
-		//std::string resultMsg = writer.write(result);
-
-  //      BOOST_FOREACH (connection_hdl it, _connections)
-  //      {
-		//	if (hdl.lock() != it.lock())
-		//		_server.send(it, resultMsg, websocketpp::frame::opcode::TEXT);
-  //      }
+        else
+        {
+            LOG_E("Unknown message type: " << msgType);
+            assert(false);
+        }
     }
 
 	void sendJson(connection_hdl hdl, const Json::Value& msg)
@@ -288,12 +267,12 @@ private:
     std::set<connection_hdl> _connections;
 	unsigned _ssrcCounter;
 
-    // for SSRC mapping
-    std::map<unsigned, UserPtr> _ssrcUsers;
     // for signaling connection mapping
     typedef std::map<connection_hdl, UserPtr> SignalingMap;
     SignalingMap _signalingUsers;
     UdpServer* _udpServer;
+
+    boost::mt19937 _randomGenerator;
 };
 
 int main()
@@ -305,8 +284,6 @@ int main()
     boost::thread thr(bind(&BroadcastServer::run, &server, 10000));
     udpServer.start(7000);
     
-
-    //udpServer.stop();
     thr.join();
     LOG_D("server finished working");
 

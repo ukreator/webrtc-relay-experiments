@@ -1,5 +1,8 @@
-#ifndef ___UdpServer_h__
-#define ___UdpServer_h__
+#ifndef ___UdpServer_hpp__
+#define ___UdpServer_hpp__
+
+#include <IntTypes.hpp>
+#include <User.hpp>
 
 #include <stun/usages/ice.h>
 
@@ -12,10 +15,6 @@
 #include <map>
 #include <string>
 
-typedef boost::uint16_t sm_uint16_t;
-typedef boost::uint8_t sm_uint8_t;
-typedef boost::uint64_t sm_uint64_t;
-typedef boost::uint32_t sm_uint32_t;
 
 class UdpServer: boost::noncopyable
 {
@@ -30,13 +29,21 @@ public:
 
     void sendPacket(const sm_uint8_t*, size_t, const boost::asio::ip::udp::endpoint& targetEndpoint);
 
-    void addRecognizedIceUser(const std::string& user, const std::string& pwd);
+    void addRecognizedIceUser(const std::vector<sm_uint8_t>& user, const std::vector<sm_uint8_t>& pwd);
 
-    void removeRecognizedIceUser(const std::string& user);
+    void removeRecognizedIceUser(const std::vector<sm_uint8_t>& user);
+
+    void addUser(UserPtr user);
+
+    void removeUser(UserPtr user);
 
 private:
 
     void handleStunPacket(const sm_uint8_t* data, size_t size);
+
+    bool handleRtcpPacket(const sm_uint8_t* data, size_t size);
+
+    void broadcast(const sm_uint8_t* data, size_t size);
 
     void startReceive();
 
@@ -64,6 +71,8 @@ private:
     StunAgent _stunAgent;
     typedef std::map<std::vector<sm_uint8_t>, std::vector<sm_uint8_t> > UserPassMap;
     UserPassMap _recognizedIceUsers;
+
+    std::map<sm_uint32_t, UserPtr> _ssrcUsers;
 };
 
 

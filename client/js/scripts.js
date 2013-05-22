@@ -91,10 +91,10 @@ CA = {};
           new CA.PeerConnection(CA.PeerConnectionType.PC_TYPE_DOWNLINK, {rendererId: 'remoteVideoRenderer'});
       downlinkConnection.setSignalingTransportHandler(CA.RealtimeTransport);
       var onOffer = function (iceUfrag, icePwd) {
-        CA.RealtimeTransport.newDownlinkConnection(iceUfrag, icePwd);
+        CA.RealtimeTransport.newDownlinkConnection(uevent.userId, iceUfrag, icePwd);
       };
       downlinkConnection.makeOffer(onOffer);
-      downlinkConnections[uevent.userId] = downlinkConnection;
+      CA.downlinkConnections[uevent.userId] = downlinkConnection;
     } else if (uevent.eventType == CA.UserEventTypes.DOWNLINK_CONNECTION_ANSWER) {
       CA.downlinkConnections[uevent.userId].handleStreamerAnswer(uevent);
     }
