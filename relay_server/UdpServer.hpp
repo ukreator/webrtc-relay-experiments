@@ -29,9 +29,10 @@ public:
 
     void sendPacket(const sm_uint8_t*, size_t, const boost::asio::ip::udp::endpoint& targetEndpoint);
 
-    void addRecognizedIceUser(const std::vector<sm_uint8_t>& user, const std::vector<sm_uint8_t>& pwd);
+    void addIceUser(const std::vector<sm_uint8_t>& iceUname, UserPtr user,
+        MediaLinkType linkType, int downlinkUserId);
 
-    void removeRecognizedIceUser(const std::vector<sm_uint8_t>& user);
+    void removeIceUser(const std::vector<sm_uint8_t>& iceUname);
 
     void addUser(UserPtr user);
 
@@ -43,7 +44,9 @@ private:
 
     bool handleRtcpPacket(const sm_uint8_t* data, size_t size);
 
-    void broadcast(const sm_uint8_t* data, size_t size);
+    void handleMediaPacket(const sm_uint8_t* data, size_t size);
+
+    void broadcast(const UserPtr& user, const sm_uint8_t* data, size_t size);
 
     void startReceive();
 
@@ -68,11 +71,23 @@ private:
 
     boost::thread _ioServiceThread;
 
+    // STUN context to answer to connectivity checks
     StunAgent _stunAgent;
-    typedef std::map<std::vector<sm_uint8_t>, std::vector<sm_uint8_t> > UserPassMap;
-    UserPassMap _recognizedIceUsers;
 
-    std::map<sm_uint32_t, UserPtr> _ssrcUsers;
+    struct LinkHelper
+    {
+        UserPtr user;
+        MediaLinkType linkType;
+        int downlinkUserId;
+    };
+    typedef std::map<std::vector<sm_uint8_t>, LinkHelper> UserToLinkMap;
+    UserToLinkMap _iceUnames;
+
+    typedef std::map<sm_uint32_t, UserPtr> SsrcToUserMap;
+    SsrcToUserMap _ssrcUsers;
+
+    // this variable is set in validateStunCredentials
+    LinkHelper _iceUserRef;
 };
 
 

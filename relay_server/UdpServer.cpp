@@ -1,25 +1,8 @@
 #include <UdpServer.hpp>
+#include <Scope.hpp>
+#include <WebRtcRelayUtils.hpp>
 #include <Log.hpp>
 #include <boost/foreach.hpp>
-
-
-
-namespace
-{
-bool isStun(const sm_uint8_t* data, size_t len)
-{
-    if (len < 8)
-        return false;
-    // first 2 bits should be 0
-    if ((data[0] & 0xC0) != 0)
-        return false;
-    // magic cookie, 4 bytes starting from 4th byte
-    const sm_uint8_t* p = data + STUN_MESSAGE_TRANS_ID_POS;
-    sm_uint32_t cookie = (p[0] << 24) |
-        (p[1] << 16) | (p[2] << 8) | p[3];
-    return cookie == STUN_MAGIC_COOKIE;
-}
-}
 
 
 UdpServer::UdpServer(const boost::asio::ip::address& listeningAddr):
@@ -91,14 +74,17 @@ void UdpServer::startReceive()
             boost::asio::placeholders::bytes_transferred));
 }
 
-void UdpServer::addRecognizedIceUser(const std::vector<sm_uint8_t>& uname, const std::vector<sm_uint8_t>& pwd)
+void UdpServer::addIceUser(const std::vector<sm_uint8_t>& iceUname, UserPtr user,
+        MediaLinkType linkType, int downlinkUserId)
 {
-    _recognizedIceUsers.insert(std::make_pair(uname, pwd));
+    assert((linkType == MEDIA_LINK_TYPE_UPLINK) || (linkType == MEDIA_LINK_TYPE_DOWNLINK));
+    LinkHelper lh = {user, linkType, downlinkUserId};
+    _iceUnames.insert(std::make_pair(iceUname, lh));
 }
 
-void UdpServer::removeRecognizedIceUser(const std::vector<sm_uint8_t>& user)
+void UdpServer::removeIceUser(const std::vector<sm_uint8_t>& user)
 {
-    _recognizedIceUsers.erase(user);
+    _iceUnames.erase(user);
 }
 
 void UdpServer::addUser(UserPtr user)
@@ -106,20 +92,21 @@ void UdpServer::addUser(UserPtr user)
     _ssrcUsers.insert(std::make_pair(user->_audioSsrc, user));
     _ssrcUsers.insert(std::make_pair(user->_videoSsrc, user));
 
-    _recognizedIceUsers.insert(std::make_pair(user->_uplinkIceCreds.verifyingUname(),
-        user->_uplinkIceCreds.verifyingPwd()));
+    addIceUser(user->_uplink.iceCredentials->verifyingUname(),
+        user, MEDIA_LINK_TYPE_UPLINK, 0);
 }
 
 void UdpServer::removeUser(UserPtr user)
 {
     _ssrcUsers.erase(user->_audioSsrc);
     _ssrcUsers.erase(user->_videoSsrc);
-    _recognizedIceUsers.erase(user->_uplinkIceCreds.verifyingUname());
-    // remove downlink ICE credentials:
-    BOOST_FOREACH(User::DownlinkIceCredentials::value_type& v,
-        user->_downlinkIceCredentials)
+    removeIceUser(user->_uplink.iceCredentials->verifyingUname());
+
+    // removing downlink ICE credentials:
+    BOOST_FOREACH(User::DownlinksMap::value_type& v,
+        user->_downlinks)
     {
-        _recognizedIceUsers.erase(v.second->verifyingUname());
+        removeIceUser(v.second.iceCredentials->verifyingUname());
     }
 }
 
@@ -130,11 +117,14 @@ bool UdpServer::validateStunCredentials(StunAgent *agent,
     UdpServer* _this = (UdpServer*)userData;
 
     std::vector<sm_uint8_t> uname(username, username + usernameLen);
-    UserPassMap::iterator it = _this->_recognizedIceUsers.find(uname);
-    if (it != _this->_recognizedIceUsers.end())
+    UserToLinkMap::iterator it = _this->_iceUnames.find(uname);
+    if (it != _this->_iceUnames.end())
     {
-        *password = &(it->second[0]);
-        *passwordLen = it->second.size();
+        LinkHelper& lh = it->second;
+        lh.user->getIcePassword(lh.linkType, lh.downlinkUserId,
+            password, passwordLen);
+        // set mapped user info as side effect:
+        _this->_iceUserRef = lh;
         return true;
     }
 
@@ -177,38 +167,61 @@ void UdpServer::handleReceive(const boost::system::error_code& error,
         return;
     }
 
-    bool shouldBroadcast = false;
+    
     const sm_uint8_t* data = (const sm_uint8_t*)_recvBuffer.data();
     if (isStun(data, size))
-    {
         handleStunPacket(data, size);
-    }
-    //else if (isRtcp(data, size))
-    //{
-    //    broadcast = handleRtcpPacket(data, size);
-    //}
     else
-    {
-        shouldBroadcast = true;
-    }
-
-    if (shouldBroadcast)
-        broadcast(data, size);
-
-    // TODO: think how to handle ROC incremented before new user connected
-    // and received media stream. Is it possible to extract ROC from incoming RTP,
-    // save it in User and distribute along with new downlink connection establishment event
+        handleMediaPacket(data, size);
 
     startReceive();
 }
 
-void UdpServer::broadcast(const sm_uint8_t* data, size_t size)
+void UdpServer::handleMediaPacket(const sm_uint8_t* data, size_t size)
 {
-    // - get SSRC from data
-    // - get User by ssrc
-    // - redirect to Scope which maintains list of connected users
-    // - add immutable Endpoint class
-    // - add uplink and downlink endpoints to User
+    bool shouldBroadcast = true;
+    //if (isRtcp(data, size))
+    //{
+    //    broadcast = handleRtcpPacket(data, size);
+    //}
+    //else
+    //{
+    //    shouldBroadcast = true;
+    //}
+
+    sm_uint32_t ssrc = getSsrc(data, size);
+    if (!ssrc)
+        return;
+
+    SsrcToUserMap::iterator it = _ssrcUsers.find(ssrc);
+    if (it == _ssrcUsers.end())
+    {
+        LOG_W("Unknown SSRC " << ssrc);
+        return;
+    }
+
+    UserPtr user = it->second;
+
+    // TODO: check incoming SRTP/SRTCP packet authentication
+    // silently drop packet if not authenticated
+
+    if (shouldBroadcast)
+        broadcast(user, data, size);
+
+    // TODO: think how to handle ROC incremented before new user connected
+    // and received media stream. Is it possible to extract ROC from incoming RTP,
+    // save it in User and distribute along with new downlink connection establishment event
+}
+
+
+extern Scope gGlobalScope;
+void UdpServer::broadcast(const UserPtr& uplinkUser, const sm_uint8_t* data, size_t size)
+{
+    std::vector<TransportEndpoint> endpoints = gGlobalScope.getDownlinkEndpointsFor(uplinkUser->_userId);
+    BOOST_FOREACH(TransportEndpoint& te, endpoints)
+    {
+        _socket.send_to(boost::asio::buffer(data, size), te._udpEndpoint);
+    }
 }
 
 bool UdpServer::handleRtcpPacket(const sm_uint8_t* data, size_t size)
@@ -240,12 +253,23 @@ void UdpServer::handleStunPacket(const sm_uint8_t* data, size_t size)
 
             if (res == STUN_USAGE_ICE_RETURN_ROLE_CONFLICT)
             {
-                LOG_E("Fatal: error conflict");
+                // this should not happen by design:
+                // our ICE-LITE agent is always controlled
+                LOG_E("Fatal: role conflict");
+                assert(!"ICE role conflict");
             }
             else if (res == STUN_USAGE_ICE_RETURN_SUCCESS)
             {
                 bool useCandidate = stun_usage_ice_conncheck_use_candidate(&request);
-                LOG_D("Should be used as nominated: " << useCandidate);
+                if (useCandidate)
+                {
+                    LOG_D("ICE concluded with endpoint " << _remoteEndpoint);
+                    // we've just conclude ICE processing according to RFC 5445 8.2.1
+                    TransportEndpoint te;
+                    te._udpEndpoint = _remoteEndpoint;
+                    _iceUserRef.user->updateIceEndpoint(_iceUserRef.linkType,
+                        _iceUserRef.downlinkUserId, te);
+                }
                 _socket.send_to(boost::asio::buffer(&rbuf[0], rbufLen), _remoteEndpoint);
             }
             else

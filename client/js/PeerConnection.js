@@ -117,11 +117,11 @@
       var sdp = self._initialOfferSdp;
       var offererMode, answererMode;
       if (this.connectionType == CA.PeerConnectionType.PC_TYPE_UPLINK) {
-        offererMode = 'send';
+        offererMode = 'sendonly';
         answererMode = 'recvonly';
       } else {
         offererMode = 'recvonly';
-        answererMode = 'send';
+        answererMode = 'sendonly';
       }
       
       log.debug('Parsing and modifying initial candidateless offer: \r\n' + sdp.sdp);
@@ -453,6 +453,7 @@
           case 'recv':
           case 'sendrecv':
           case 'recvonly':
+          case 'sendonly':
           case 'inactive':
             this.direction = value;
             break;

@@ -278,6 +278,14 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\Scope.hpp"
+				>
+			</File>
+			<File
+				RelativePath="..\..\TransportEndpoint.hpp"
+				>
+			</File>
+			<File
 				RelativePath="..\..\UdpServer.hpp"
 				>
 			</File>

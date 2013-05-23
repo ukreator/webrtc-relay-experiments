@@ -1,6 +1,7 @@
 #include <UdpServer.hpp>
 #include <User.hpp>
 #include <IceCredentials.hpp>
+#include <Scope.hpp>
 #include <Log.hpp>
 
 #include <websocketpp/config/asio_no_tls.hpp>
@@ -21,20 +22,7 @@ using websocketpp::lib::placeholders::_1;
 using websocketpp::lib::placeholders::_2;
 using websocketpp::lib::bind;
 
-class Scope
-{
-public:
-	Scope(const std::string& scopeId): _scopeId(scopeId)
-	{
-		_keyAndSalt = "jJv7OTSY+x5YFIisLr59b5OVIBCrHT+5gK6OZmNd";
-	}
 
-	
-
-//private:
-	std::string _scopeId;
-	std::string _keyAndSalt;
-};
 
 Scope gGlobalScope("1");
 
@@ -42,7 +30,7 @@ Scope gGlobalScope("1");
 class BroadcastServer
 {
 public:
-	BroadcastServer(): _ssrcCounter(0), _udpServer(0),
+    BroadcastServer(): _ssrcCounter(0), _udpServer(0),
         _randomGenerator(sm_uint32_t(std::time(0)))
     {
         //_server.set_access_channels(websocketpp::log::alevel::all);
@@ -69,7 +57,7 @@ public:
     {
         _connections.erase(hdl);
         
-    	UserPtr user = getUserByConnection(hdl);
+        UserPtr user = getUserByConnection(hdl);
         if (user)
         {
             LOG_D("Cleaning ICE and SSRC mappings");
@@ -95,52 +83,52 @@ public:
     {
         LOG_D("Got message: " << msg->get_payload());
 
-		Json::Reader reader;
-		Json::Value root;
-		bool parsed = reader.parse(msg->get_payload(), root);
-		if (!parsed)
-		{
-			LOG_E("Failed to parse message");
-			return;
-		}
+        Json::Reader reader;
+        Json::Value root;
+        bool parsed = reader.parse(msg->get_payload(), root);
+        if (!parsed)
+        {
+            LOG_E("Failed to parse message");
+            return;
+        }
 
-		Json::Value result;
-		std::string msgType = root["type"].asString();
+        Json::Value result;
+        std::string msgType = root["type"].asString();
         Json::Value params = root["data"];
 
-		if (msgType == "authRequest")
-		{
-			int userId = params["userId"].asInt();
-			std::string scopeId = params["scopeId"].asString();
+        if (msgType == "authRequest")
+        {
+            int userId = params["userId"].asInt();
+            std::string scopeId = params["scopeId"].asString();
 
-            IceCredentials iceCreds(_randomGenerator);
-			iceCreds.setRemoteCredentials(params["iceUfrag"].asString(),
+            IceCredentialsPtr iceCreds = boost::make_shared<IceCredentials>(boost::ref(_randomGenerator));
+            iceCreds->setRemoteCredentials(params["iceUfrag"].asString(),
                 params["icePwd"].asString());
             UserPtr user = boost::make_shared<User>(userId, scopeId, iceCreds);
 
             user->_audioSsrc = newSsrc();
             user->_videoSsrc = newSsrc();
 
-			_signalingUsers.insert(std::make_pair(hdl, user));
+            _signalingUsers.insert(std::make_pair(hdl, user));
 
             _udpServer->addUser(user);
             //_udpServer->addRecognizedIceUser(iceCreds.verifyingUname(),
             //    iceCreds.verifyingPwd());
 
-			result["type"] = "authResponse";
-			Json::Value data;
-			data["cryptoKey"] = gGlobalScope._keyAndSalt;
-			data["audioSsrc"] = user->_audioSsrc;
-			data["videoSsrc"] = user->_videoSsrc;
-			data["iceUfrag"] = iceCreds.localUfrag();
-			data["icePwd"] = iceCreds.localPwd();
-			// foundation component-id protocol priority address port type
-			data["candidate"] = "0 1 UDP 2113667327 192.168.1.33 7000 typ host";
-			data["port"] = "7000"; //< for m= lines
-			data["address"] = "192.168.1.33"; //< for c= lines
+            result["type"] = "authResponse";
+            Json::Value data;
+            data["cryptoKey"] = gGlobalScope._keyAndSalt;
+            data["audioSsrc"] = user->_audioSsrc;
+            data["videoSsrc"] = user->_videoSsrc;
+            data["iceUfrag"] = iceCreds->localUfrag();
+            data["icePwd"] = iceCreds->localPwd();
+            // foundation component-id protocol priority address port type
+            data["candidate"] = "0 1 UDP 2113667327 192.168.1.33 7000 typ host";
+            data["port"] = "7000"; //< for m= lines
+            data["address"] = "192.168.1.33"; //< for c= lines
 
-			result["data"] = data;
-			sendJson(hdl, result);
+            result["data"] = data;
+            sendJson(hdl, result);
 
             // notify other clients about current user connected
             BOOST_FOREACH(SignalingMap::value_type& userPair, _signalingUsers)
@@ -155,7 +143,7 @@ public:
             //    if (userPair.first.lock().get() != hdl.lock().get())
             //        reportConnectedUser(hdl, userPair.second);
             //}
-		}
+        }
         else if (msgType == "userEvent")
         {
             if (params["eventType"] == "startNewDownlink")
@@ -168,36 +156,39 @@ public:
                 }
 
                 IceCredentialsPtr iceCreds = boost::make_shared<IceCredentials>(boost::ref(_randomGenerator));
-			    iceCreds->setRemoteCredentials(params["iceUfrag"].asString(),
+                iceCreds->setRemoteCredentials(params["iceUfrag"].asString(),
                     params["icePwd"].asString());
-                int userId = params["userId"].asInt();
+                int downlinkUserId = params["userId"].asInt();
 
-                user->_downlinkIceCredentials[userId] = iceCreds;
-                _udpServer->addRecognizedIceUser(iceCreds->verifyingUname(),
-                    iceCreds->verifyingPwd());
+                LinkInfo downlink;
+                downlink.iceCredentials = iceCreds;
+                
+                user->_downlinks[downlinkUserId] = downlink;
+                _udpServer->addIceUser(iceCreds->verifyingUname(), user,
+                    MEDIA_LINK_TYPE_DOWNLINK, downlinkUserId);
 
                 // TODO: save and set in JS SSRCs for RTCP RR and feedback packets
-			    unsigned audioSsrc = newSsrc();
-			    unsigned videoSsrc = newSsrc();
-			    //_ssrcUsers.insert(std::make_pair(audioSsrc, user));
-			    //_ssrcUsers.insert(std::make_pair(videoSsrc, user));
+                unsigned audioSsrc = newSsrc();
+                unsigned videoSsrc = newSsrc();
+                //_ssrcUsers.insert(std::make_pair(audioSsrc, user));
+                //_ssrcUsers.insert(std::make_pair(videoSsrc, user));
 
-			    result["type"] = "userEvent";
-			    Json::Value data;
+                result["type"] = "userEvent";
+                Json::Value data;
                 data["eventType"] = "downlinkConnectionAnswer";
-                data["userId"] = userId;
-			    data["cryptoKey"] = gGlobalScope._keyAndSalt;
-			    data["audioSsrc"] = audioSsrc;
-			    data["videoSsrc"] = videoSsrc;
-			    data["iceUfrag"] = iceCreds->localUfrag();
-			    data["icePwd"] = iceCreds->localPwd();
-			    // foundation component-id protocol priority address port type
-			    data["candidate"] = "0 1 UDP 2113667327 192.168.1.33 7000 typ host";
-			    data["port"] = "7000"; //< for m= lines
-			    data["address"] = "192.168.1.33"; //< for c= lines
+                data["userId"] = downlinkUserId;
+                data["cryptoKey"] = gGlobalScope._keyAndSalt;
+                data["audioSsrc"] = audioSsrc;
+                data["videoSsrc"] = videoSsrc;
+                data["iceUfrag"] = iceCreds->localUfrag();
+                data["icePwd"] = iceCreds->localPwd();
+                // foundation component-id protocol priority address port type
+                data["candidate"] = "0 1 UDP 2113667327 192.168.1.33 7000 typ host";
+                data["port"] = "7000"; //< for m= lines
+                data["address"] = "192.168.1.33"; //< for c= lines
 
-			    result["data"] = data;
-			    sendJson(hdl, result);
+                result["data"] = data;
+                sendJson(hdl, result);
             }
             else
             {
@@ -205,11 +196,11 @@ public:
                 assert(false);
             }
         }
-		else if (msgType == "iceCandidate")
-		{
+        else if (msgType == "iceCandidate")
+        {
             //unsigned short port = boost::lexical_cast<unsigned short>(root["data"]["port"].asString());
             //std::string ipAddr = root["data"]["ipAddr"].asString();
-		}
+        }
         else
         {
             LOG_E("Unknown message type: " << msgType);
@@ -217,17 +208,17 @@ public:
         }
     }
 
-	void sendJson(connection_hdl hdl, const Json::Value& msg)
-	{
-		Json::FastWriter writer;
-		std::string resultMsg = writer.write(msg);
-		_server.send(hdl, resultMsg, websocketpp::frame::opcode::TEXT);
-	}
+    void sendJson(connection_hdl hdl, const Json::Value& msg)
+    {
+        Json::FastWriter writer;
+        std::string resultMsg = writer.write(msg);
+        _server.send(hdl, resultMsg, websocketpp::frame::opcode::TEXT);
+    }
 
-	unsigned newSsrc()
-	{
-		return ++_ssrcCounter;
-	}
+    unsigned newSsrc()
+    {
+        return ++_ssrcCounter;
+    }
 
     UserPtr getUserByConnection(connection_hdl hdl)
     {
@@ -265,7 +256,7 @@ public:
 private:
     server _server;
     std::set<connection_hdl> _connections;
-	unsigned _ssrcCounter;
+    unsigned _ssrcCounter;
 
     // for signaling connection mapping
     typedef std::map<connection_hdl, UserPtr> SignalingMap;

@@ -15,4 +15,15 @@
  */
 void generatePrintableBytes(size_t size, boost::mt19937& gen, std::vector<sm_uint8_t>* outBuf);
 
+/**
+ * Returns true if buffer @data of size @len has signatures of STUN packet (RFC 5389 only)
+ */
+bool isStun(const sm_uint8_t* data, size_t len);
+
+void hostToNetwork(sm_uint32_t val, sm_uint8_t* out);
+
+sm_uint32_t networkToHost(const sm_uint8_t* val);
+
+sm_uint32_t getSsrc(const sm_uint8_t* data, size_t len);
+
 #endif

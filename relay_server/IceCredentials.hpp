@@ -18,8 +18,7 @@ class IceCredentials
 public:
     explicit IceCredentials(boost::mt19937& gen)
     {
-        generatePrintableBytes(ICE_DEFAULT_UFRAG_LEN, gen, &_localUfrag);
-        generatePrintableBytes(ICE_DEFAULT_PWD_LEN, gen, &_localPwd);
+        generateLocal(gen);
     }
 
     void setRemoteCredentials(const std::string& ufrag, const std::string& pwd)
@@ -50,6 +49,12 @@ public:
         return _localPwd;
     }
 
+    void verifyingPwd(sm_uint8_t **password, size_t *passwordLen)
+    {
+        *password = &_localPwd[0];
+        *passwordLen = _localPwd.size();
+    }
+
     std::string localUfrag() const
     {
         std::string localUfrag(_localUfrag.begin(), _localUfrag.end());
@@ -67,6 +72,13 @@ public:
     }
 
 private:
+
+    void generateLocal(boost::mt19937& gen)
+    {
+        generatePrintableBytes(ICE_DEFAULT_UFRAG_LEN, gen, &_localUfrag);
+        generatePrintableBytes(ICE_DEFAULT_PWD_LEN, gen, &_localPwd);
+    }
+
     std::vector<sm_uint8_t> _localUfrag;
     std::vector<sm_uint8_t> _localPwd;
     std::vector<sm_uint8_t> _remoteUfrag;
