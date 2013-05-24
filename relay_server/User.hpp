@@ -77,6 +77,7 @@ public:
     std::string _scopeId;
     unsigned _audioSsrc;
     unsigned _videoSsrc;
+    std::string _uplinkOfferSdp;
     LinkInfo _uplink;
 
     // mapping between userId and WebRTC link info

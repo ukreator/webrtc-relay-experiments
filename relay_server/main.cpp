@@ -63,6 +63,7 @@ public:
             LOG_D("Cleaning ICE and SSRC mappings");
             _udpServer->removeUser(user);
         }
+        _signalingUsers.erase(hdl);
         
         LOG_D("Connection closed");
     }
@@ -108,12 +109,12 @@ public:
 
             user->_audioSsrc = newSsrc();
             user->_videoSsrc = newSsrc();
+            user->_uplinkOfferSdp = params["offerSdp"].asString();
 
             _signalingUsers.insert(std::make_pair(hdl, user));
 
             _udpServer->addUser(user);
-            //_udpServer->addRecognizedIceUser(iceCreds.verifyingUname(),
-            //    iceCreds.verifyingPwd());
+            gGlobalScope.addUser(userId, user);
 
             result["type"] = "authResponse";
             Json::Value data;
@@ -182,6 +183,10 @@ public:
                 data["videoSsrc"] = videoSsrc;
                 data["iceUfrag"] = iceCreds->localUfrag();
                 data["icePwd"] = iceCreds->localPwd();
+
+                UserPtr downlinkUser = gGlobalScope.getUser(downlinkUserId);
+                data["offerSdp"] = downlinkUser->_uplinkOfferSdp;
+
                 // foundation component-id protocol priority address port type
                 data["candidate"] = "0 1 UDP 2113667327 192.168.1.33 7000 typ host";
                 data["port"] = "7000"; //< for m= lines

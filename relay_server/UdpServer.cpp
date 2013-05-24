@@ -202,6 +202,8 @@ void UdpServer::handleMediaPacket(const sm_uint8_t* data, size_t size)
 
     UserPtr user = it->second;
 
+    // TODO: additional check for remote endpoint if it's registered
+
     // TODO: check incoming SRTP/SRTCP packet authentication
     // silently drop packet if not authenticated
 

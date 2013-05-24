@@ -6,6 +6,7 @@
 #include <User.hpp>
 
 #include <boost/foreach.hpp>
+#include <boost/thread.hpp>
 
 class Scope
 {
@@ -32,7 +33,17 @@ public:
         return endpoints;
     }
 
-//private:
+    void addUser(int userId, UserPtr user)
+    {
+        _users.insert(std::make_pair(userId, user));
+    }
+
+    const std::string keyAndSalt() const
+    {
+        return _keyAndSalt;
+    }
+
+private:
 	std::string _scopeId;
 	std::string _keyAndSalt;
 
