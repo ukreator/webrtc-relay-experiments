@@ -48,8 +48,8 @@ CA = {};
 
     uplinkConnection.setSignalingTransportHandler(CA.RealtimeTransport);
 
-    var onOffer = function (iceUfrag, icePwd) {
-      CA.RealtimeTransport.authRequest(CA.ownClientId, scopeId, iceUfrag, icePwd);
+    var onOffer = function (iceUfrag, icePwd, offerSdp) {
+      CA.RealtimeTransport.authRequest(CA.ownClientId, scopeId, iceUfrag, icePwd, offerSdp);
     };
     
     // this will trigger ICE discovery:

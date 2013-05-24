@@ -57,12 +57,13 @@
     };
   };
 
-  CA.RealtimeTransport.authRequest = function (userId, scopeId, iceUfrag, icePwd) {
+  CA.RealtimeTransport.authRequest = function (userId, scopeId, iceUfrag, icePwd, offerSdp) {
     var authRequest = {
       userId: CA.ownClientId,
       scopeId: scopeId,
       iceUfrag: iceUfrag,
-      icePwd: icePwd
+      icePwd: icePwd,
+      offerSdp: offerSdp
     };
     log.debug('[RT] = Sending auth request');
     socket.emit(CA.MessageType.AUTH_REQUEST,
@@ -76,7 +77,7 @@
       iceUfrag: iceUfrag,
       icePwd: icePwd
     };
-    log.debug('[RT] = Sending request to start new downlink connection: ' + request);
+    log.debug('[RT] = Sending request to start new downlink connection: ' + JSON.stringify(request));
     socket.emit(CA.MessageType.USER_EVENT,
       request);
   };
