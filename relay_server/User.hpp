@@ -18,12 +18,15 @@ enum MediaLinkType
 
 struct LinkInfo
 {
-    //explicit LinkInfo(boost::mt19937& gen): iceCredentials(gen)
-    //{}
+    LinkInfo(): peerAudioSsrc(0), peerVideoSsrc(0), streamerAudioSsrc(0), streamerVideoSsrc(0)
+    {}
 
     boost::shared_ptr<IceCredentials> iceCredentials;
     TransportEndpoint transportEndpoint;
-    //MediaLinkType 
+    sm_uint32_t peerAudioSsrc;
+    sm_uint32_t peerVideoSsrc;
+    sm_uint32_t streamerAudioSsrc;
+    sm_uint32_t streamerVideoSsrc;
 };
 
 class User
@@ -72,11 +75,12 @@ public:
         }
     }
 
+
 //private:
     int _userId;
     std::string _scopeId;
-    unsigned _audioSsrc;
-    unsigned _videoSsrc;
+    //unsigned _audioSsrc;
+    //unsigned _videoSsrc;
     std::string _uplinkOfferSdp;
     LinkInfo _uplink;
 

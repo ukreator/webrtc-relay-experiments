@@ -19,7 +19,7 @@
 class UdpServer: boost::noncopyable
 {
 public:
-    UdpServer(const boost::asio::ip::address& listeningAddr);
+    UdpServer(boost::asio::io_service& ioService, const boost::asio::ip::address& listeningAddr);
 
     ~UdpServer();
 
@@ -61,15 +61,13 @@ private:
         StunMessage *message, uint8_t *username, uint16_t usernameLen,
         uint8_t **password, size_t *passwordLen, void *userData);
 
+    boost::asio::io_service& _ioService;
 
-    boost::asio::io_service _ioService;
 	sm_uint16_t _port;
     boost::asio::ip::udp::socket _socket;
     boost::asio::ip::udp::endpoint _remoteEndpoint;
     boost::array<char, 4000> _recvBuffer;
     boost::asio::ip::address _listeningAddr;
-
-    boost::thread _ioServiceThread;
 
     // STUN context to answer to connectivity checks
     StunAgent _stunAgent;

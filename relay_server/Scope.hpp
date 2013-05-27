@@ -43,6 +43,14 @@ public:
         return _keyAndSalt;
     }
 
+    UserPtr getUser(int userId)
+    {
+        UsersMap::iterator it = _users.find(userId);
+        if (it != _users.end())
+            return it->second;
+        return UserPtr();
+    }
+
 private:
 	std::string _scopeId;
 	std::string _keyAndSalt;

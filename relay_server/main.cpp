@@ -22,6 +22,15 @@ using websocketpp::lib::placeholders::_1;
 using websocketpp::lib::placeholders::_2;
 using websocketpp::lib::bind;
 
+namespace
+{
+const std::string gServerIpAddr = "192.168.1.33";
+const sm_uint16_t gServerPort = 7000;
+const sm_uint16_t gSignalingPort = 10000;
+const std::string gServerPortStr = "7000";
+const std::string gServerCandidate = "0 1 UDP 2113667327 " + gServerIpAddr
+    + " " + gServerPortStr + " typ host";
+}
 
 
 Scope gGlobalScope("1");
@@ -30,13 +39,13 @@ Scope gGlobalScope("1");
 class BroadcastServer
 {
 public:
-    BroadcastServer(): _ssrcCounter(0), _udpServer(0),
+    explicit BroadcastServer(boost::asio::io_service& ioService): _ssrcCounter(0), _udpServer(0),
         _randomGenerator(sm_uint32_t(std::time(0)))
     {
         //_server.set_access_channels(websocketpp::log::alevel::all);
         //_server.clear_access_channels(websocketpp::log::alevel::frame_payload);
-        _server.init_asio();
-                
+
+        _server.init_asio(&ioService);
         _server.set_open_handler(bind(&BroadcastServer::onOpen, this, ::_1));
         _server.set_close_handler(bind(&BroadcastServer::onClose, this, ::_1));
         _server.set_message_handler(bind(&BroadcastServer::onMessage, this, ::_1,::_2));
@@ -107,8 +116,11 @@ public:
                 params["icePwd"].asString());
             UserPtr user = boost::make_shared<User>(userId, scopeId, iceCreds);
 
-            user->_audioSsrc = newSsrc();
-            user->_videoSsrc = newSsrc();
+            user->_uplink.peerAudioSsrc = newSsrc();
+            user->_uplink.peerVideoSsrc = newSsrc();
+            user->_uplink.streamerAudioSsrc = newSsrc();
+            user->_uplink.streamerVideoSsrc = newSsrc();
+            
             user->_uplinkOfferSdp = params["offerSdp"].asString();
 
             _signalingUsers.insert(std::make_pair(hdl, user));
@@ -118,15 +130,18 @@ public:
 
             result["type"] = "authResponse";
             Json::Value data;
-            data["cryptoKey"] = gGlobalScope._keyAndSalt;
-            data["audioSsrc"] = user->_audioSsrc;
-            data["videoSsrc"] = user->_videoSsrc;
+            data["cryptoKey"] = gGlobalScope.keyAndSalt();
+            data["peerAudioSsrc"] = user->_uplink.peerAudioSsrc;
+            data["peerVideoSsrc"] = user->_uplink.peerVideoSsrc;
+            data["streamerAudioSsrc"] = user->_uplink.streamerAudioSsrc;
+            data["streamerVideoSsrc"] = user->_uplink.streamerVideoSsrc;
             data["iceUfrag"] = iceCreds->localUfrag();
             data["icePwd"] = iceCreds->localPwd();
             // foundation component-id protocol priority address port type
-            data["candidate"] = "0 1 UDP 2113667327 192.168.1.33 7000 typ host";
-            data["port"] = "7000"; //< for m= lines
-            data["address"] = "192.168.1.33"; //< for c= lines
+            data["candidate"] = gServerCandidate;
+            data["port"] = gServerPortStr; //< for m= lines
+            data["address"] = gServerIpAddr; //< for c= lines
+            data["offerSdp"] = user->_uplinkOfferSdp;
 
             result["data"] = data;
             sendJson(hdl, result);
@@ -169,8 +184,8 @@ public:
                     MEDIA_LINK_TYPE_DOWNLINK, downlinkUserId);
 
                 // TODO: save and set in JS SSRCs for RTCP RR and feedback packets
-                unsigned audioSsrc = newSsrc();
-                unsigned videoSsrc = newSsrc();
+                unsigned peerAudioSsrc = newSsrc();
+                unsigned peerVideoSsrc = newSsrc();
                 //_ssrcUsers.insert(std::make_pair(audioSsrc, user));
                 //_ssrcUsers.insert(std::make_pair(videoSsrc, user));
 
@@ -178,19 +193,25 @@ public:
                 Json::Value data;
                 data["eventType"] = "downlinkConnectionAnswer";
                 data["userId"] = downlinkUserId;
-                data["cryptoKey"] = gGlobalScope._keyAndSalt;
-                data["audioSsrc"] = audioSsrc;
-                data["videoSsrc"] = videoSsrc;
+                data["cryptoKey"] = gGlobalScope.keyAndSalt();
+                data["peerAudioSsrc"] = peerAudioSsrc;
+                data["peerVideoSsrc"] = peerVideoSsrc;
                 data["iceUfrag"] = iceCreds->localUfrag();
                 data["icePwd"] = iceCreds->localPwd();
 
                 UserPtr downlinkUser = gGlobalScope.getUser(downlinkUserId);
-                data["offerSdp"] = downlinkUser->_uplinkOfferSdp;
+                assert(downlinkUser);
+                data["offerSdp"] = params["offerSdp"];
+                data["answerSdp"] = downlinkUser->_uplinkOfferSdp;
+                // these SSRCs will be used in SDP answer from streamer
+                // for WebRtc client to recognize remote data
+                data["streamerAudioSsrc"] = downlinkUser->_uplink.peerAudioSsrc;
+                data["streamerVideoSsrc"] = downlinkUser->_uplink.peerVideoSsrc;
 
                 // foundation component-id protocol priority address port type
-                data["candidate"] = "0 1 UDP 2113667327 192.168.1.33 7000 typ host";
-                data["port"] = "7000"; //< for m= lines
-                data["address"] = "192.168.1.33"; //< for c= lines
+                data["candidate"] = gServerCandidate;
+                data["port"] = gServerPortStr; //< for m= lines
+                data["address"] = gServerIpAddr; //< for c= lines
 
                 result["data"] = data;
                 sendJson(hdl, result);
@@ -274,11 +295,13 @@ private:
 int main()
 {
     LOG_D("starting server");
-    BroadcastServer server;
-    UdpServer udpServer(boost::asio::ip::address_v4::from_string("192.168.1.33"));
+
+    boost::asio::io_service ioService;
+    BroadcastServer server(ioService);
+    UdpServer udpServer(ioService, boost::asio::ip::address_v4::from_string(gServerIpAddr));
     server.setUdpServer(&udpServer);
-    boost::thread thr(bind(&BroadcastServer::run, &server, 10000));
-    udpServer.start(7000);
+    udpServer.start(gServerPort);
+    boost::thread thr(bind(&BroadcastServer::run, &server, gSignalingPort));
     
     thr.join();
     LOG_D("server finished working");

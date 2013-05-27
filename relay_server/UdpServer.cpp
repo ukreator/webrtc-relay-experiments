@@ -5,7 +5,9 @@
 #include <boost/foreach.hpp>
 
 
-UdpServer::UdpServer(const boost::asio::ip::address& listeningAddr):
+UdpServer::UdpServer(boost::asio::io_service& ioService,
+                     const boost::asio::ip::address& listeningAddr):
+    _ioService(ioService),
     _port(0),
     _socket(_ioService, boost::asio::ip::udp::v4()),
     _listeningAddr(listeningAddr)
@@ -34,13 +36,13 @@ void UdpServer::start(sm_uint16_t port)
     _port = port;
     LOG_I("UDP server started listening on " << ep);
 
-    _ioServiceThread = boost::thread(boost::bind(&UdpServer::run, this));
+    //_ioServiceThread = boost::thread(boost::bind(&UdpServer::run, this));
 }
 
 void UdpServer::stop()
 {
     _ioService.post(boost::bind(&UdpServer::stopInternal, this));
-    _ioServiceThread.join();
+    //_ioServiceThread.join();
 }
 
 void UdpServer::stopInternal()
@@ -89,8 +91,8 @@ void UdpServer::removeIceUser(const std::vector<sm_uint8_t>& user)
 
 void UdpServer::addUser(UserPtr user)
 {
-    _ssrcUsers.insert(std::make_pair(user->_audioSsrc, user));
-    _ssrcUsers.insert(std::make_pair(user->_videoSsrc, user));
+    _ssrcUsers.insert(std::make_pair(user->_uplink.peerAudioSsrc, user));
+    _ssrcUsers.insert(std::make_pair(user->_uplink.peerVideoSsrc, user));
 
     addIceUser(user->_uplink.iceCredentials->verifyingUname(),
         user, MEDIA_LINK_TYPE_UPLINK, 0);
@@ -98,8 +100,8 @@ void UdpServer::addUser(UserPtr user)
 
 void UdpServer::removeUser(UserPtr user)
 {
-    _ssrcUsers.erase(user->_audioSsrc);
-    _ssrcUsers.erase(user->_videoSsrc);
+    _ssrcUsers.erase(user->_uplink.peerAudioSsrc);
+    _ssrcUsers.erase(user->_uplink.peerVideoSsrc);
     removeIceUser(user->_uplink.iceCredentials->verifyingUname());
 
     // removing downlink ICE credentials:
@@ -109,28 +111,6 @@ void UdpServer::removeUser(UserPtr user)
         removeIceUser(v.second.iceCredentials->verifyingUname());
     }
 }
-
-bool UdpServer::validateStunCredentials(StunAgent *agent,
-    StunMessage *message, uint8_t *username, uint16_t usernameLen,
-    uint8_t **password, size_t *passwordLen, void *userData)
-{
-    UdpServer* _this = (UdpServer*)userData;
-
-    std::vector<sm_uint8_t> uname(username, username + usernameLen);
-    UserToLinkMap::iterator it = _this->_iceUnames.find(uname);
-    if (it != _this->_iceUnames.end())
-    {
-        LinkHelper& lh = it->second;
-        lh.user->getIcePassword(lh.linkType, lh.downlinkUserId,
-            password, passwordLen);
-        // set mapped user info as side effect:
-        _this->_iceUserRef = lh;
-        return true;
-    }
-
-    return false;
-}
-
 
 void UdpServer::handleReceive(const boost::system::error_code& error,
     std::size_t size)
@@ -222,12 +202,38 @@ void UdpServer::broadcast(const UserPtr& uplinkUser, const sm_uint8_t* data, siz
     std::vector<TransportEndpoint> endpoints = gGlobalScope.getDownlinkEndpointsFor(uplinkUser->_userId);
     BOOST_FOREACH(TransportEndpoint& te, endpoints)
     {
+        if (te._udpEndpoint.port() == 0)
+        {
+            LOG_W("Zero UDP port to send to");
+            continue;
+        }
         _socket.send_to(boost::asio::buffer(data, size), te._udpEndpoint);
     }
 }
 
 bool UdpServer::handleRtcpPacket(const sm_uint8_t* data, size_t size)
 {
+    return false;
+}
+
+bool UdpServer::validateStunCredentials(StunAgent *agent,
+    StunMessage *message, uint8_t *username, uint16_t usernameLen,
+    uint8_t **password, size_t *passwordLen, void *userData)
+{
+    UdpServer* _this = (UdpServer*)userData;
+
+    std::vector<sm_uint8_t> uname(username, username + usernameLen);
+    UserToLinkMap::iterator it = _this->_iceUnames.find(uname);
+    if (it != _this->_iceUnames.end())
+    {
+        LinkHelper& lh = it->second;
+        lh.user->getIcePassword(lh.linkType, lh.downlinkUserId,
+            password, passwordLen);
+        // set mapped user info as side effect:
+        _this->_iceUserRef = lh;
+        return true;
+    }
+
     return false;
 }
 
@@ -266,7 +272,7 @@ void UdpServer::handleStunPacket(const sm_uint8_t* data, size_t size)
                 if (useCandidate)
                 {
                     LOG_D("ICE concluded with endpoint " << _remoteEndpoint);
-                    // we've just conclude ICE processing according to RFC 5445 8.2.1
+                    // we've just concluded ICE-LITE processing according to RFC 5445 8.2.1
                     TransportEndpoint te;
                     te._udpEndpoint = _remoteEndpoint;
                     _iceUserRef.user->updateIceEndpoint(_iceUserRef.linkType,
