@@ -70,12 +70,13 @@
       authRequest);
   };
   
-  CA.RealtimeTransport.newDownlinkConnection = function (userId, iceUfrag, icePwd) {
+  CA.RealtimeTransport.newDownlinkConnection = function (userId, iceUfrag, icePwd, sdp) {
     var request = {
       eventType: 'startNewDownlink',
       userId: userId,
       iceUfrag: iceUfrag,
-      icePwd: icePwd
+      icePwd: icePwd,
+      offerSdp: sdp
     };
     log.debug('[RT] = Sending request to start new downlink connection: ' + JSON.stringify(request));
     socket.emit(CA.MessageType.USER_EVENT,

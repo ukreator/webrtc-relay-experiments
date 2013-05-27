@@ -90,8 +90,8 @@ CA = {};
       var downlinkConnection =
           new CA.PeerConnection(CA.PeerConnectionType.PC_TYPE_DOWNLINK, {rendererId: 'remoteVideoRenderer'});
       downlinkConnection.setSignalingTransportHandler(CA.RealtimeTransport);
-      var onOffer = function (iceUfrag, icePwd) {
-        CA.RealtimeTransport.newDownlinkConnection(uevent.userId, iceUfrag, icePwd);
+      var onOffer = function (iceUfrag, icePwd, sdp) {
+        CA.RealtimeTransport.newDownlinkConnection(uevent.userId, iceUfrag, icePwd, sdp);
       };
       downlinkConnection.makeOffer(onOffer);
       CA.downlinkConnections[uevent.userId] = downlinkConnection;
