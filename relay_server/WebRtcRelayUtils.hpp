@@ -5,6 +5,17 @@
 #include <boost/random/mersenne_twister.hpp>
 #include <vector>
 
+enum RtcpType
+{
+    RTCP_SR = 200,
+    RTCP_RR,
+    RTCP_SDES,
+    RTCP_BYE,
+    RTCP_APP,
+    RTCP_RTPFB,
+    RTCP_PSFB
+};
+
 /*
  * Generates a stream of octets containing only characters
  * with ASCII codecs of 0x41-5A (A-Z), 0x61-7A (a-z), 
@@ -25,5 +36,9 @@ void hostToNetwork(sm_uint32_t val, sm_uint8_t* out);
 sm_uint32_t networkToHost(const sm_uint8_t* val);
 
 sm_uint32_t getSsrc(const sm_uint8_t* data, size_t len);
+
+bool isRtcp(const sm_uint8_t* data, size_t len);
+
+RtcpType getRtcpType(const sm_uint8_t* data, size_t len);
 
 #endif

@@ -8,7 +8,8 @@
 namespace
 {
 
-const int gSsrcOffset = 8;
+const int gSsrcRtpOffset = 8;
+const int gSsrcRtcpOffset = 4;
 
 }
 
@@ -58,7 +59,26 @@ sm_uint32_t networkToHost(const sm_uint8_t* val)
 
 sm_uint32_t getSsrc(const sm_uint8_t* data, size_t len)
 {
-    if (len < 12)
-        return 0;
-    return networkToHost(data + gSsrcOffset);
+    sm_uint32_t ssrc = 0;
+    if (len >= 12)
+    {    
+        int offset = isRtcp(data, len) ? gSsrcRtcpOffset: gSsrcRtpOffset;
+        ssrc = networkToHost(data + offset);
+    }
+    return ssrc;
+}
+
+bool isRtcp(const sm_uint8_t* data, size_t len)
+{
+    if (len < 8)
+        return false;
+    if ((data[0] & 0xC0) != 0x80)
+        return false;
+    return data[1] <= RTCP_PSFB && data[1] >= RTCP_SR;
+}
+
+RtcpType getRtcpType(const sm_uint8_t* data, size_t len)
+{
+    assert(isRtcp(data, len));
+    return (RtcpType)data[1];
 }

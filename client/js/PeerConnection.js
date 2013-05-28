@@ -175,6 +175,10 @@
     mediaSection.crypto.key = cryptoKey;
     // 2. unique server-generated SSRCs
     mediaSection.ssrc = ssrc;
+    if (mediaSection.ssrcLabels['cname'] === undefined) {
+      // FIXME: use proper random-generated value (or use algo from one of RFCs)
+      mediaSection.ssrcLabels.cname = 'du4X8c59zH/810bO';
+    }
     // 3. RFC 5245 and http://tools.ietf.org/html/draft-ivov-mmusic-trickle-ice-01
     //    compatibility
     mediaSection.attributes['ice-options'] = 'trickle';
@@ -195,7 +199,7 @@
       mgAnswer.mediaSections[i].direction = 'recvonly';
       // remove SSRC lines from original offer
       // TODO: add streamer SSRCs if necessary (params.answerSsrc has these values)
-      mgAnswer.mediaSections[i].ssrcLabels = [];
+      mgAnswer.mediaSections[i].ssrcLabels = {};
     }
 
     mgAnswer.flush();
@@ -472,7 +476,7 @@
     this.attributes = {};
     this.codecsMap = {};
     this.codecs = [];
-    this.ssrcLabels = [];
+    this.ssrcLabels = {};
     this.rtcpfbLabels = [];
     this.iceCandidates = [];
 
@@ -531,7 +535,8 @@
           case 'ssrc':
             var ssrcItms = pvalue.split(' ');
             this.ssrc = ssrcItms[0];
-            this.ssrcLabels.push(pvalue.substr(pvalue.indexOf(' ') + 1));
+            var ssrcLabels = pvalue.substr(pvalue.indexOf(' ') + 1).split(':');
+            this.ssrcLabels[ssrcLabels[0]] = ssrcLabels[1];
             break;
           case 'rtcp-fb':
             var rtcpfbItms = pvalue.split(' ');
@@ -554,7 +559,7 @@
 
   SdpMediaSection.prototype = {
 
-    serialize:function (addEntry) {
+    serialize: function (addEntry) {
       var i, j, k,
           mLine = this.mediaType + ' ' + this.port + ' ' + this.profile + ' ';
       mLine += this.codecs.join(' ');
@@ -590,14 +595,15 @@
       for (i = 0; i < this.rtcpfbLabels.length; i++) {
         addEntry(a, 'rtcp-fb:' + this.rtcpfb + ' ' + this.rtcpfbLabels[i]);
       }
-      for (i = 0; i < this.ssrcLabels.length; i++) {
-        addEntry(a, 'ssrc:' + this.ssrc + ' ' + this.ssrcLabels[i]);
+      for (k in this.ssrcLabels) {
+        if (Object.prototype.hasOwnProperty.call(this.ssrcLabels, k)) {
+          addEntry(a, 'ssrc:' + this.ssrc + ' ' + k + ':' + this.ssrcLabels[k]);
+        }
       }
       for (i = 0; i < this.iceCandidates.length; i++) {
         addEntry(a, this.iceCandidates[i]);
       }
     }
-
   };
 
 })(window, window.jQuery);

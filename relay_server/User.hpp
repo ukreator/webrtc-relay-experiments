@@ -4,6 +4,7 @@
 #include <IntTypes.hpp>
 #include <IceCredentials.hpp>
 #include <TransportEndpoint.hpp>
+#include <Log.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/asio.hpp>
 #include <map>
@@ -63,11 +64,20 @@ public:
     {
         if (linkType == MEDIA_LINK_TYPE_UPLINK)
         {
-            _uplink.transportEndpoint = te;
+            if (!_uplink.transportEndpoint.isSet())
+            {
+                _uplink.transportEndpoint = te;
+                LOG_D("Updated uplink endpoint for user " << _userId);
+            }
         }
         else if (linkType == MEDIA_LINK_TYPE_DOWNLINK)
         {
-            _downlinks[downlinkUserId].transportEndpoint = te;
+            if (!_downlinks[downlinkUserId].transportEndpoint.isSet())
+            {
+                _downlinks[downlinkUserId].transportEndpoint = te;
+                LOG_D("Updated downlink endpoint for user " << _userId
+                    << " to receive media from user " << downlinkUserId);
+            }
         }
         else
         {
@@ -79,8 +89,6 @@ public:
 //private:
     int _userId;
     std::string _scopeId;
-    //unsigned _audioSsrc;
-    //unsigned _videoSsrc;
     std::string _uplinkOfferSdp;
     LinkInfo _uplink;
 

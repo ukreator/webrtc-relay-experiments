@@ -76,39 +76,56 @@ void UdpServer::startReceive()
             boost::asio::placeholders::bytes_transferred));
 }
 
-void UdpServer::addIceUser(const std::vector<sm_uint8_t>& iceUname, UserPtr user,
-        MediaLinkType linkType, int downlinkUserId)
+void UdpServer::addLink(const std::vector<sm_uint8_t>& iceUname, UserPtr user,
+        MediaLinkType linkType, int downlinkUserId, sm_uint32_t audioSsrc, sm_uint32_t videoSsrc)
 {
     assert((linkType == MEDIA_LINK_TYPE_UPLINK) || (linkType == MEDIA_LINK_TYPE_DOWNLINK));
     LinkHelper lh = {user, linkType, downlinkUserId};
     _iceUnames.insert(std::make_pair(iceUname, lh));
+
+    _ssrcUsers.insert(std::make_pair(audioSsrc, user));
+    _ssrcUsers.insert(std::make_pair(videoSsrc, user));
 }
 
-void UdpServer::removeIceUser(const std::vector<sm_uint8_t>& user)
+void UdpServer::removeLink(const std::vector<sm_uint8_t>& uname)
 {
-    _iceUnames.erase(user);
+    UserToLinkMap::iterator it = _iceUnames.find(uname);
+    if (it != _iceUnames.end())
+    {
+        LinkHelper& lh = it->second;
+        if (lh.linkType == MEDIA_LINK_TYPE_UPLINK)
+        {
+            _ssrcUsers.erase(lh.user->_uplink.peerAudioSsrc);
+            _ssrcUsers.erase(lh.user->_uplink.peerVideoSsrc);
+        }
+        if (lh.linkType == MEDIA_LINK_TYPE_DOWNLINK)
+        {
+            LinkInfo& li = lh.user->_downlinks[lh.downlinkUserId];
+            _ssrcUsers.erase(li.peerAudioSsrc);
+            _ssrcUsers.erase(li.peerVideoSsrc);
+        }
+
+        _iceUnames.erase(it);
+    }
+    
 }
 
 void UdpServer::addUser(UserPtr user)
 {
-    _ssrcUsers.insert(std::make_pair(user->_uplink.peerAudioSsrc, user));
-    _ssrcUsers.insert(std::make_pair(user->_uplink.peerVideoSsrc, user));
-
-    addIceUser(user->_uplink.iceCredentials->verifyingUname(),
-        user, MEDIA_LINK_TYPE_UPLINK, 0);
+    addLink(user->_uplink.iceCredentials->verifyingUname(),
+        user, MEDIA_LINK_TYPE_UPLINK, 0, user->_uplink.peerAudioSsrc,
+        user->_uplink.peerVideoSsrc);
 }
 
 void UdpServer::removeUser(UserPtr user)
 {
-    _ssrcUsers.erase(user->_uplink.peerAudioSsrc);
-    _ssrcUsers.erase(user->_uplink.peerVideoSsrc);
-    removeIceUser(user->_uplink.iceCredentials->verifyingUname());
+    removeLink(user->_uplink.iceCredentials->verifyingUname());
 
-    // removing downlink ICE credentials:
+    // disposing all downlinks associated with this user
     BOOST_FOREACH(User::DownlinksMap::value_type& v,
         user->_downlinks)
     {
-        removeIceUser(v.second.iceCredentials->verifyingUname());
+        removeLink(v.second.iceCredentials->verifyingUname());
     }
 }
 
@@ -176,7 +193,8 @@ void UdpServer::handleMediaPacket(const sm_uint8_t* data, size_t size)
     SsrcToUserMap::iterator it = _ssrcUsers.find(ssrc);
     if (it == _ssrcUsers.end())
     {
-        LOG_W("Unknown SSRC " << ssrc);
+        LOG_W("Unknown SSRC " << ssrc << " from " << _remoteEndpoint
+            << (isRtcp(data, size) ? "; RTCP": "; RTP") << "; payload: " << getRtcpType(data, size));
         return;
     }
 
@@ -202,12 +220,14 @@ void UdpServer::broadcast(const UserPtr& uplinkUser, const sm_uint8_t* data, siz
     std::vector<TransportEndpoint> endpoints = gGlobalScope.getDownlinkEndpointsFor(uplinkUser->_userId);
     BOOST_FOREACH(TransportEndpoint& te, endpoints)
     {
-        if (te._udpEndpoint.port() == 0)
+        if (!te.isSet())
         {
+            // a few packets get here, because ICE processing takes time to finish
+            // after new downlink connection is added in signaling channel
             LOG_W("Zero UDP port to send to");
             continue;
         }
-        _socket.send_to(boost::asio::buffer(data, size), te._udpEndpoint);
+        _socket.send_to(boost::asio::buffer(data, size), te.udpEndpoint());
     }
 }
 
@@ -271,10 +291,8 @@ void UdpServer::handleStunPacket(const sm_uint8_t* data, size_t size)
                 bool useCandidate = stun_usage_ice_conncheck_use_candidate(&request);
                 if (useCandidate)
                 {
-                    LOG_D("ICE concluded with endpoint " << _remoteEndpoint);
                     // we've just concluded ICE-LITE processing according to RFC 5445 8.2.1
-                    TransportEndpoint te;
-                    te._udpEndpoint = _remoteEndpoint;
+                    TransportEndpoint te(_remoteEndpoint);
                     _iceUserRef.user->updateIceEndpoint(_iceUserRef.linkType,
                         _iceUserRef.downlinkUserId, te);
                 }

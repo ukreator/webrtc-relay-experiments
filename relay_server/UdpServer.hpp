@@ -29,10 +29,10 @@ public:
 
     void sendPacket(const sm_uint8_t*, size_t, const boost::asio::ip::udp::endpoint& targetEndpoint);
 
-    void addIceUser(const std::vector<sm_uint8_t>& iceUname, UserPtr user,
-        MediaLinkType linkType, int downlinkUserId);
+    void addLink(const std::vector<sm_uint8_t>& iceUname, UserPtr user,
+        MediaLinkType linkType, int downlinkUserId, sm_uint32_t audioSsrc, sm_uint32_t videoSsrc);
 
-    void removeIceUser(const std::vector<sm_uint8_t>& iceUname);
+    void removeLink(const std::vector<sm_uint8_t>& iceUname);
 
     void addUser(UserPtr user);
 

@@ -43,7 +43,7 @@ public:
         _randomGenerator(sm_uint32_t(std::time(0)))
     {
         //_server.set_access_channels(websocketpp::log::alevel::all);
-        //_server.clear_access_channels(websocketpp::log::alevel::frame_payload);
+        _server.clear_access_channels(websocketpp::log::alevel::all);
 
         _server.init_asio(&ioService);
         _server.set_open_handler(bind(&BroadcastServer::onOpen, this, ::_1));
@@ -179,15 +179,13 @@ public:
                 LinkInfo downlink;
                 downlink.iceCredentials = iceCreds;
                 
-                user->_downlinks[downlinkUserId] = downlink;
-                _udpServer->addIceUser(iceCreds->verifyingUname(), user,
-                    MEDIA_LINK_TYPE_DOWNLINK, downlinkUserId);
-
-                // TODO: save and set in JS SSRCs for RTCP RR and feedback packets
+                // JS SSRCs for RTCP RR and RTCP feedback packets
                 unsigned peerAudioSsrc = newSsrc();
                 unsigned peerVideoSsrc = newSsrc();
-                //_ssrcUsers.insert(std::make_pair(audioSsrc, user));
-                //_ssrcUsers.insert(std::make_pair(videoSsrc, user));
+
+                user->_downlinks[downlinkUserId] = downlink;
+                _udpServer->addLink(iceCreds->verifyingUname(), user,
+                    MEDIA_LINK_TYPE_DOWNLINK, downlinkUserId, peerAudioSsrc, peerVideoSsrc);
 
                 result["type"] = "userEvent";
                 Json::Value data;
