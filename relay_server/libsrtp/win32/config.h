@@ -1,6 +1,6 @@
 /* Hacked config.h for Windows XP 32-bit & VC7  */
 
-#ifdef (_MSC_VER >= 1400)
+#if defined _MSC_VER && (_MSC_VER >= 1400)
 # define HAVE_RAND_S	1
 #endif
 
