@@ -41,4 +41,9 @@ bool isRtcp(const sm_uint8_t* data, size_t len);
 
 RtcpType getRtcpType(const sm_uint8_t* data, size_t len);
 
+std::vector<sm_uint8_t> base64Decode(std::string const& encoded_string);
+
+void generateRtcpFir(std::vector<sm_uint8_t>& result, sm_uint32_t fromSsrc, sm_uint32_t toSsrc,
+                     sm_uint8_t seqNumber);
+
 #endif

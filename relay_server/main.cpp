@@ -150,15 +150,17 @@ public:
             BOOST_FOREACH(SignalingMap::value_type& userPair, _signalingUsers)
             {
                 if (userPair.first.lock().get() != hdl.lock().get())
+                {
                     reportConnectedUser(userPair.first, user);
+                }
             }
 
             // send info about users already present in current room to this user
-            //BOOST_FOREACH(SignalingMap::value_type& userPair, _signalingUsers)
-            //{
-            //    if (userPair.first.lock().get() != hdl.lock().get())
-            //        reportConnectedUser(hdl, userPair.second);
-            //}
+            BOOST_FOREACH(SignalingMap::value_type& userPair, _signalingUsers)
+            {
+                if (userPair.first.lock().get() != hdl.lock().get())
+                    reportConnectedUser(hdl, userPair.second);
+            }
         }
         else if (msgType == "userEvent")
         {
@@ -174,7 +176,10 @@ public:
                 IceCredentialsPtr iceCreds = boost::make_shared<IceCredentials>(boost::ref(_randomGenerator));
                 iceCreds->setRemoteCredentials(params["iceUfrag"].asString(),
                     params["icePwd"].asString());
+
                 int downlinkUserId = params["userId"].asInt();
+                UserPtr downlinkUser = gGlobalScope.getUser(downlinkUserId);
+                assert(downlinkUser);
 
                 LinkInfo downlink;
                 downlink.iceCredentials = iceCreds;
@@ -185,7 +190,8 @@ public:
 
                 user->_downlinks[downlinkUserId] = downlink;
                 _udpServer->addLink(iceCreds->verifyingUname(), user,
-                    MEDIA_LINK_TYPE_DOWNLINK, downlinkUserId, peerAudioSsrc, peerVideoSsrc);
+                    MEDIA_LINK_TYPE_DOWNLINK, peerAudioSsrc, peerVideoSsrc,
+                    downlinkUserId, downlinkUser->_uplink.peerVideoSsrc);
 
                 result["type"] = "userEvent";
                 Json::Value data;
@@ -197,8 +203,6 @@ public:
                 data["iceUfrag"] = iceCreds->localUfrag();
                 data["icePwd"] = iceCreds->localPwd();
 
-                UserPtr downlinkUser = gGlobalScope.getUser(downlinkUserId);
-                assert(downlinkUser);
                 data["offerSdp"] = params["offerSdp"];
                 data["answerSdp"] = downlinkUser->_uplinkOfferSdp;
                 // these SSRCs will be used in SDP answer from streamer

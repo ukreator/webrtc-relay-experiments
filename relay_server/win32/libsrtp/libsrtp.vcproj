@@ -175,6 +175,13 @@
 				<File
 					RelativePath="..\..\libsrtp\crypto\cipher\aes_icm.c"
 					>
+					<FileConfiguration
+						Name="Debug|Win32"
+						>
+						<Tool
+							Name="VCCLCompilerTool"
+						/>
+					</FileConfiguration>
 				</File>
 				<File
 					RelativePath="..\..\libsrtp\crypto\kernel\alloc.c"

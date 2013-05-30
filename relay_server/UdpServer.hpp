@@ -5,6 +5,7 @@
 #include <User.hpp>
 
 #include <stun/usages/ice.h>
+#include <srtp.h>
 
 #include <boost/asio.hpp>
 #include <boost/array.hpp>
@@ -25,18 +26,21 @@ public:
 
     void start(sm_uint16_t port);
 
-    void stop();
+    void stopAsync();
 
     void sendPacket(const sm_uint8_t*, size_t, const boost::asio::ip::udp::endpoint& targetEndpoint);
 
     void addLink(const std::vector<sm_uint8_t>& iceUname, UserPtr user,
-        MediaLinkType linkType, int downlinkUserId, sm_uint32_t audioSsrc, sm_uint32_t videoSsrc);
+        MediaLinkType linkType, sm_uint32_t audioSsrc, sm_uint32_t videoSsrc,
+        int downlinkUserId, sm_uint32_t downlinkUserPeerVideoSsrc);
 
     void removeLink(const std::vector<sm_uint8_t>& iceUname);
 
     void addUser(UserPtr user);
 
     void removeUser(UserPtr user);
+
+    void requestFir(sm_uint32_t downlinkUserPeerVideoSsrc);
 
 private:
 
@@ -57,6 +61,8 @@ private:
 
     void run();
 
+    void initSrtpSession(srtp_t* srtpCtx, ssrc_type_t direction);
+
     static bool validateStunCredentials(StunAgent *agent,
         StunMessage *message, uint8_t *username, uint16_t usernameLen,
         uint8_t **password, size_t *passwordLen, void *userData);
@@ -72,11 +78,16 @@ private:
     // STUN context to answer to connectivity checks
     StunAgent _stunAgent;
 
+    srtp_t _srtpInboundSession;
+    srtp_t _srtpOutboundSession;
+
     struct LinkHelper
     {
         UserPtr user;
         MediaLinkType linkType;
         int downlinkUserId;
+        // used to find uplink to send FIR to:
+        sm_uint32_t downlinkUserPeerVideoSsrc;
     };
     typedef std::map<std::vector<sm_uint8_t>, LinkHelper> UserToLinkMap;
     UserToLinkMap _iceUnames;

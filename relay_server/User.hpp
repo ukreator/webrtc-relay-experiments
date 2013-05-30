@@ -59,7 +59,7 @@ public:
         icp->verifyingPwd(password, passwordLen);
     }
 
-    void updateIceEndpoint(MediaLinkType linkType, int downlinkUserId,
+    bool updateIceEndpoint(MediaLinkType linkType, int downlinkUserId,
         const TransportEndpoint& te)
     {
         if (linkType == MEDIA_LINK_TYPE_UPLINK)
@@ -68,6 +68,7 @@ public:
             {
                 _uplink.transportEndpoint = te;
                 LOG_D("Updated uplink endpoint for user " << _userId);
+                return true;
             }
         }
         else if (linkType == MEDIA_LINK_TYPE_DOWNLINK)
@@ -77,12 +78,15 @@ public:
                 _downlinks[downlinkUserId].transportEndpoint = te;
                 LOG_D("Updated downlink endpoint for user " << _userId
                     << " to receive media from user " << downlinkUserId);
+                return true;
             }
         }
         else
         {
             assert(!"link type is not set");
         }
+
+        return false;
     }
 
 

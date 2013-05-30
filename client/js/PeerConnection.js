@@ -211,6 +211,8 @@
     for (var i = 0; i < mgAnswer.mediaSections.length; i++) {
       // SSRC values from remote user's uplink connection
       mgAnswer.mediaSections[i].ssrc = params.answerSsrc[i];
+      // common crypto keys
+      mgAnswer.mediaSections[i].crypto.key = params.cryptoKey;
     }
     this._setStreamerEndpointParams(mgAnswer, params);
     mgAnswer.flush();
