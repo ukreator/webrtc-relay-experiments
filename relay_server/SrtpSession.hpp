@@ -2,30 +2,43 @@
 #define ___SrtpSession_hpp__
 
 #include <IntTypes.hpp>
-#include <srtp.h>
-#include <string>
+#include <boost/shared_ptr.hpp>
+#include <vector>
 
-// TODO: create class with hidden libsrtp calls and RAII style
+struct srtp_ctx_t;
+typedef srtp_ctx_t* srtp_t;
 
-void initSrtpSession(srtp_t* srtpCtx, const std::vector<sm_uint8_t>& keySalt,
-                                ssrc_type_t direction)
+extern const int SRTCP_MAX_TRAILER_LEN;
+
+enum SrtpSessionDirection
 {
-    srtp_policy_t policy;
-    memset(&policy, 0, sizeof(policy));
-    crypto_policy_set_aes_cm_128_hmac_sha1_80(&policy.rtp);
-    crypto_policy_set_aes_cm_128_hmac_sha1_80(&policy.rtcp);
-    policy.ssrc.type = direction;
-    policy.ssrc.value = 0;
-    policy.window_size = 1024;
-    policy.allow_repeat_tx = 1; // enable for now
-    policy.next = NULL;
+    SRTP_SESSION_DIRECTION_INBOUND,
+    SRTP_SESSION_DIRECTION_OUTBOUND
+};
 
-    //std::vector<sm_uint8_t> key = keySalt;
-    policy.key = (unsigned char*)&keySalt[0];
+class SrtpSession
+{
+public:
+    SrtpSession();
 
-    err_status_t status = srtp_create(srtpCtx, &policy);
-    assert(status == err_status_ok);
-    // TODO: add events handling
-}
+    void setKey(const std::vector<sm_uint8_t>& keySalt,
+                                SrtpSessionDirection direction);
+
+    size_t protect(sm_uint8_t* data, size_t size);
+
+    size_t protectRtcp(sm_uint8_t* data, size_t size);
+
+    size_t unprotect(sm_uint8_t* data, size_t size);
+
+    size_t unprotectRtcp(sm_uint8_t* data, size_t size);
+
+private:
+
+    static void freeCtx(srtp_t* ctx);
+    boost::shared_ptr<srtp_t> _srtpCtx;
+};
+
+void initSrtpLibrary();
+void releaseGlobalSrtp();
 
 #endif

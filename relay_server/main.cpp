@@ -109,10 +109,10 @@ public:
         uplink.iceCredentials = iceCreds;
 
         uplink.peerKeySalt = base64Decode(params["cryptoKey"].asString());
-        initSrtpSession(&uplink.srtpPeerSession, uplink.peerKeySalt, ssrc_any_inbound);
+        uplink.srtpPeerSession.setKey(uplink.peerKeySalt, SRTP_SESSION_DIRECTION_INBOUND);
 
         uplink.streamerKeySalt = defaultSizeKeySalt(_randomGenerator);
-        initSrtpSession(&uplink.srtpStreamerSession, uplink.streamerKeySalt, ssrc_any_outbound);
+        uplink.srtpStreamerSession.setKey(uplink.streamerKeySalt, SRTP_SESSION_DIRECTION_OUTBOUND);
 
         user->_uplink = uplink;
         assert(user->_uplink.iceCredentials);
@@ -190,10 +190,10 @@ public:
         downlink.streamerVideoSsrc = senderUser->_uplink.peerVideoSsrc;
 
         downlink.peerKeySalt = base64Decode(params["cryptoKey"].asString());
-        initSrtpSession(&downlink.srtpPeerSession, downlink.peerKeySalt, ssrc_any_inbound);
+        downlink.srtpPeerSession.setKey(downlink.peerKeySalt, SRTP_SESSION_DIRECTION_INBOUND);
 
         downlink.streamerKeySalt = defaultSizeKeySalt(_randomGenerator);
-        initSrtpSession(&downlink.srtpStreamerSession, downlink.streamerKeySalt, ssrc_any_outbound);
+        downlink.srtpStreamerSession.setKey(downlink.streamerKeySalt, SRTP_SESSION_DIRECTION_OUTBOUND);
 
         user->_downlinks[senderUserId] = downlink;
         _udpServer->addLink(iceCreds->verifyingUname(), user,

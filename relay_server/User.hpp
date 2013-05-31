@@ -4,13 +4,13 @@
 #include <IntTypes.hpp>
 #include <IceCredentials.hpp>
 #include <TransportEndpoint.hpp>
+#include <SrtpSession.hpp>
 #include <Log.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/asio.hpp>
 #include <map>
 #include <string>
 
-#include <srtp.h>
 
 enum MediaLinkType
 {
@@ -28,8 +28,8 @@ struct LinkInfo
 
     std::vector<sm_uint8_t> peerKeySalt;
     std::vector<sm_uint8_t> streamerKeySalt;
-    srtp_t srtpPeerSession; // peer -> streamer
-    srtp_t srtpStreamerSession; // streamer -> peer
+    SrtpSession srtpPeerSession; // peer -> streamer
+    SrtpSession srtpStreamerSession; // streamer -> peer
 
     TransportEndpoint transportEndpoint;
     sm_uint32_t peerAudioSsrc;

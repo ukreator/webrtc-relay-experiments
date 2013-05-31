@@ -1,11 +1,12 @@
 #ifndef ___Scope_hpp__
 #define ___Scope_hpp__
 
-#include <string>
 #include <TransportEndpoint.hpp>
+#include <SrtpSession.hpp>
 #include <User.hpp>
 
 #include <boost/foreach.hpp>
+#include <string>
 
 class Scope
 {
@@ -14,9 +15,9 @@ public:
 	{
 	}
 
-    std::vector<std::pair<TransportEndpoint, srtp_t> > getDownlinkEndpointsFor(int userId)
+    std::vector<std::pair<TransportEndpoint, SrtpSession> > getDownlinkEndpointsFor(int userId)
     {
-        std::vector<std::pair<TransportEndpoint, srtp_t> > endpoints;
+        std::vector<std::pair<TransportEndpoint, SrtpSession> > endpoints;
         // enumerate all users in this room except uplink one
         BOOST_FOREACH(UsersMap::value_type& u, _users)
         {

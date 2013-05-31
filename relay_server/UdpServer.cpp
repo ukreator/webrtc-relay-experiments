@@ -4,12 +4,7 @@
 #include <Log.hpp>
 #include <boost/foreach.hpp>
 
-#include <srtp.h>
-
 extern Scope gGlobalScope;
-
-#define SRTCP_INDEX_LEN 4
-#define SRTCP_MAX_TRAILER_LEN SRTP_MAX_TRAILER_LEN + SRTCP_INDEX_LEN
 
 UdpServer::UdpServer(boost::asio::io_service& ioService,
                      const boost::asio::ip::address& listeningAddr):
@@ -24,8 +19,7 @@ UdpServer::UdpServer(boost::asio::io_service& ioService,
     stun_agent_init(&_stunAgent, STUN_ALL_KNOWN_ATTRIBUTES, STUN_COMPATIBILITY_RFC5389,
         flags);
 
-    err_status_t status = srtp_init();
-    assert(status == err_status_ok);
+    initSrtpLibrary();
 }
 
 UdpServer::~UdpServer()
@@ -152,12 +146,13 @@ void UdpServer::requestFir(sm_uint32_t senderSsrc)
     std::vector<sm_uint8_t> buf;
     generateRtcpFir(buf, sender->_uplink.streamerVideoSsrc, senderSsrc, 0);
 
-    int packetLen = buf.size();
+    size_t packetLen = buf.size();
+    // prepare space for auth
     buf.resize(packetLen + SRTCP_MAX_TRAILER_LEN);
-    err_status_t res = srtp_protect_rtcp(sender->_uplink.srtpStreamerSession, &buf[0], &packetLen);
-    if (res != err_status_ok)
+    packetLen = sender->_uplink.srtpStreamerSession.protectRtcp(&buf[0], packetLen);
+    if (!packetLen)
     {
-        LOG_E("Failed to encode incoming RTCP packet: " << res);
+        LOG_E("Failed to encode streamer-generated FIR packet");
         return;
     }
 
@@ -231,9 +226,7 @@ void UdpServer::handleMediaPacket(sm_uint8_t* data, size_t size)
     // TODO: additional check for remote endpoint if it's registered
 
     // decode with original uplink SRTP context
-    int packetLen = size;
-    err_status_t res;
-    srtp_t session;
+    SrtpSession session;
 
     if (it->second.linkType == MEDIA_LINK_TYPE_DOWNLINK)
     {
@@ -245,36 +238,45 @@ void UdpServer::handleMediaPacket(sm_uint8_t* data, size_t size)
     }
 
     bool rtcp = false;
+    size_t decodedLen;
     if (isRtcp(data, size))
     {
         rtcp = true;
-        res = srtp_unprotect_rtcp(session, data, &packetLen);
+        decodedLen = session.unprotectRtcp(data, size);
     }
     else
     {
-        res = srtp_unprotect(session, data, &packetLen);
+        decodedLen = session.unprotect(data, size);
     }
+
+    // TODO: if SSRC remapping is needed, it can be done right here
+    // - change {SSRC -> User} mapping to {(remote_endpoint, original_peer_SSRC} -> User}
+    // - problem - how to determine SSRCs of RTCP packets originating from downlink connection?
+    // - maintain server-unique SSRC for audio and video from each uplink
+    // - change SSRC in RTP/RTCP from browser-assigned SSRC to server SSRC
+    // - skip remapping if the packet goes from downlink connection (e.g. RTCP RR or FIR)
+
 
     // TODO: block RTCP RR propagation (?)
     // TODO: generate RTCP RR from incoming RTCP SR (?)
 
-    if (res != err_status_ok)
+    if (!decodedLen)
     {
-        LOG_E("Failed to decode " << (rtcp ? "RTCP": "RTP") << " incoming packet; code: " << res
-            << "; SSRC: " << ssrc << "; key: " << base64Encode(&user->_uplink.peerKeySalt[0], user->_uplink.peerKeySalt.size()));
+        LOG_E("Failed to decode " << (rtcp ? "RTCP": "RTP") << " incoming packet; SSRC: "
+            << ssrc << "; key: " << base64Encode(user->_uplink.peerKeySalt));
         return;
     }
 
     if (shouldBroadcast)
-        broadcast(user, data, packetLen);
+        broadcast(user, data, decodedLen);
 }
 
 
 void UdpServer::broadcast(const UserPtr& uplinkUser, sm_uint8_t* data, size_t size)
 {
-    std::vector<std::pair<TransportEndpoint, srtp_t> > endpoints =
+    std::vector<std::pair<TransportEndpoint, SrtpSession> > endpoints =
         gGlobalScope.getDownlinkEndpointsFor(uplinkUser->_userId);
-    typedef std::pair<TransportEndpoint, srtp_t> EP;
+    typedef std::pair<TransportEndpoint, SrtpSession> EP;
     BOOST_FOREACH(EP& te, endpoints)
     {
         if (!te.first.isSet())
@@ -285,22 +287,21 @@ void UdpServer::broadcast(const UserPtr& uplinkUser, sm_uint8_t* data, size_t si
             continue;
         }
 
-        err_status_t res;
-        int packetLen = (int)size;
+        size_t newSize;
         // reencode with downlink context
-        srtp_t session = te.second;
+        SrtpSession& session = te.second;
         if (isRtcp(data, size))
-            res = srtp_protect_rtcp(session, data, &packetLen);
+            newSize = session.protectRtcp(data, size);
         else
-            res = srtp_protect(session, data, &packetLen);
+            newSize = session.protect(data, size);
 
-        if (res != err_status_ok)
+        if (!newSize)
         {
-            LOG_E("Failed to encode incoming RTCP packet: " << res);
+            LOG_E("Failed to encode outgoing packet");
             return;
         }
 
-        _socket.send_to(boost::asio::buffer(data, packetLen), te.first.udpEndpoint());
+        _socket.send_to(boost::asio::buffer(data, newSize), te.first.udpEndpoint());
     }
 }
 
