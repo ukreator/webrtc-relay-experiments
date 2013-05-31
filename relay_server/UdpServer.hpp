@@ -5,7 +5,6 @@
 #include <User.hpp>
 
 #include <stun/usages/ice.h>
-#include <srtp.h>
 
 #include <boost/asio.hpp>
 #include <boost/array.hpp>
@@ -48,9 +47,9 @@ private:
 
     bool handleRtcpPacket(const sm_uint8_t* data, size_t size);
 
-    void handleMediaPacket(const sm_uint8_t* data, size_t size);
+    void handleMediaPacket(sm_uint8_t* data, size_t size);
 
-    void broadcast(const UserPtr& user, const sm_uint8_t* data, size_t size);
+    void broadcast(const UserPtr& user, sm_uint8_t* data, size_t size);
 
     void startReceive();
 
@@ -60,8 +59,6 @@ private:
     void stopInternal();
 
     void run();
-
-    void initSrtpSession(srtp_t* srtpCtx, ssrc_type_t direction);
 
     static bool validateStunCredentials(StunAgent *agent,
         StunMessage *message, uint8_t *username, uint16_t usernameLen,
@@ -78,21 +75,19 @@ private:
     // STUN context to answer to connectivity checks
     StunAgent _stunAgent;
 
-    srtp_t _srtpInboundSession;
-    srtp_t _srtpOutboundSession;
-
     struct LinkHelper
     {
         UserPtr user;
         MediaLinkType linkType;
-        int downlinkUserId;
-        // used to find uplink to send FIR to:
-        sm_uint32_t downlinkUserPeerVideoSsrc;
+
+        // downlink info helpers:
+        int senderUserId;
+        sm_uint32_t senderVideoSsrc;
     };
     typedef std::map<std::vector<sm_uint8_t>, LinkHelper> UserToLinkMap;
     UserToLinkMap _iceUnames;
 
-    typedef std::map<sm_uint32_t, UserPtr> SsrcToUserMap;
+    typedef std::map<sm_uint32_t, LinkHelper> SsrcToUserMap;
     SsrcToUserMap _ssrcUsers;
 
     // this variable is set in validateStunCredentials

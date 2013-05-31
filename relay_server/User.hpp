@@ -10,6 +10,8 @@
 #include <map>
 #include <string>
 
+#include <srtp.h>
+
 enum MediaLinkType
 {
     MEDIA_LINK_TYPE_UPLINK,
@@ -23,6 +25,12 @@ struct LinkInfo
     {}
 
     boost::shared_ptr<IceCredentials> iceCredentials;
+
+    std::vector<sm_uint8_t> peerKeySalt;
+    std::vector<sm_uint8_t> streamerKeySalt;
+    srtp_t srtpPeerSession; // peer -> streamer
+    srtp_t srtpStreamerSession; // streamer -> peer
+
     TransportEndpoint transportEndpoint;
     sm_uint32_t peerAudioSsrc;
     sm_uint32_t peerVideoSsrc;
@@ -33,10 +41,9 @@ struct LinkInfo
 class User
 {
 public:
-    User(int userId, const std::string& scopeId, const IceCredentialsPtr& iceCreds):
+    User(int userId, const std::string& scopeId):
       _userId(userId), _scopeId(scopeId)
     {
-        _uplink.iceCredentials = iceCreds;
     }
 
     void getIcePassword(MediaLinkType linkType, int downlinkUserId,

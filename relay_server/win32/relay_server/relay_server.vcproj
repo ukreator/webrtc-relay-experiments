@@ -222,6 +222,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\..\SrtpSession.hpp"
+				>
+			</File>
+			<File
 				RelativePath="..\..\TransportEndpoint.hpp"
 				>
 			</File>

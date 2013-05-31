@@ -4,6 +4,8 @@
 #include <Log.hpp>
 #include <boost/foreach.hpp>
 
+#include <srtp.h>
+
 extern Scope gGlobalScope;
 
 #define SRTCP_INDEX_LEN 4
@@ -24,34 +26,11 @@ UdpServer::UdpServer(boost::asio::io_service& ioService,
 
     err_status_t status = srtp_init();
     assert(status == err_status_ok);
-
-    initSrtpSession(&_srtpOutboundSession, ssrc_any_outbound);
-    initSrtpSession(&_srtpInboundSession, ssrc_any_inbound);
 }
 
 UdpServer::~UdpServer()
 {
-    srtp_dealloc(_srtpOutboundSession);
-}
-
-void UdpServer::initSrtpSession(srtp_t* srtpCtx, ssrc_type_t direction)
-{
-    srtp_policy_t policy;
-    memset(&policy, 0, sizeof(policy));
-    crypto_policy_set_aes_cm_128_hmac_sha1_80(&policy.rtp);
-    crypto_policy_set_aes_cm_128_hmac_sha1_80(&policy.rtcp);
-    policy.ssrc.type = direction;
-    policy.ssrc.value = 0;
-    policy.window_size = 1024;
-    policy.allow_repeat_tx = 1; // enable for now
-    policy.next = NULL;
-
-    std::vector<sm_uint8_t> key = base64Decode(gGlobalScope.keyAndSalt());
-    policy.key = &key[0];
-
-    err_status_t status = srtp_create(srtpCtx, &policy);
-    assert(status == err_status_ok);
-    // TODO: add events handling
+    //srtp_dealloc(_srtpOutboundSession);
 }
 
 void UdpServer::start(sm_uint16_t port)
@@ -112,8 +91,8 @@ void UdpServer::addLink(const std::vector<sm_uint8_t>& iceUname, UserPtr user,
     LinkHelper lh = {user, linkType, downlinkUserId, downlinkUserPeerVideoSsrc};
     _iceUnames.insert(std::make_pair(iceUname, lh));
 
-    _ssrcUsers.insert(std::make_pair(audioSsrc, user));
-    _ssrcUsers.insert(std::make_pair(videoSsrc, user));
+    _ssrcUsers.insert(std::make_pair(audioSsrc, lh));
+    _ssrcUsers.insert(std::make_pair(videoSsrc, lh));
 }
 
 void UdpServer::removeLink(const std::vector<sm_uint8_t>& uname)
@@ -129,7 +108,7 @@ void UdpServer::removeLink(const std::vector<sm_uint8_t>& uname)
         }
         if (lh.linkType == MEDIA_LINK_TYPE_DOWNLINK)
         {
-            LinkInfo& li = lh.user->_downlinks[lh.downlinkUserId];
+            LinkInfo& li = lh.user->_downlinks[lh.senderUserId];
             _ssrcUsers.erase(li.peerAudioSsrc);
             _ssrcUsers.erase(li.peerVideoSsrc);
         }
@@ -158,34 +137,33 @@ void UdpServer::removeUser(UserPtr user)
     }
 }
 
-void UdpServer::requestFir(sm_uint32_t downlinkUserPeerVideoSsrc)
+void UdpServer::requestFir(sm_uint32_t senderSsrc)
 {
-    SsrcToUserMap::iterator it = _ssrcUsers.find(downlinkUserPeerVideoSsrc);
+    SsrcToUserMap::iterator it = _ssrcUsers.find(senderSsrc);
     if (it == _ssrcUsers.end())
     {
-        LOG_E("No uplink found for SSRC " << downlinkUserPeerVideoSsrc);
+        LOG_E("No uplink found for SSRC " << senderSsrc);
         assert(!"No uplink for SSRC");
         return;
     }
 
-    UserPtr to = it->second;
-    sm_uint32_t senderSsrc = to->_uplink.peerVideoSsrc;
-    assert(senderSsrc == downlinkUserPeerVideoSsrc);
+    UserPtr sender = it->second.user;
+    assert(senderSsrc == sender->_uplink.peerVideoSsrc);
     std::vector<sm_uint8_t> buf;
-    generateRtcpFir(buf, to->_uplink.streamerVideoSsrc, senderSsrc, 0);
+    generateRtcpFir(buf, sender->_uplink.streamerVideoSsrc, senderSsrc, 0);
 
     int packetLen = buf.size();
     buf.resize(packetLen + SRTCP_MAX_TRAILER_LEN);
-    err_status_t res = srtp_protect_rtcp(_srtpOutboundSession, &buf[0], &packetLen);
+    err_status_t res = srtp_protect_rtcp(sender->_uplink.srtpStreamerSession, &buf[0], &packetLen);
     if (res != err_status_ok)
     {
         LOG_E("Failed to encode incoming RTCP packet: " << res);
         return;
     }
 
-    _socket.send_to(boost::asio::buffer(&buf[0], packetLen), to->_uplink.transportEndpoint.udpEndpoint());
-    LOG_D("FIR sent from ssrc " << to->_uplink.streamerVideoSsrc
-        << " to ssrc " << senderSsrc << " on endpoint " << to->_uplink.transportEndpoint.udpEndpoint());
+    _socket.send_to(boost::asio::buffer(&buf[0], packetLen), sender->_uplink.transportEndpoint.udpEndpoint());
+    LOG_D("FIR sent from ssrc " << sender->_uplink.streamerVideoSsrc
+        << " to ssrc " << senderSsrc << " on endpoint " << sender->_uplink.transportEndpoint.udpEndpoint());
 }
 
 void UdpServer::handleReceive(const boost::system::error_code& error,
@@ -224,7 +202,7 @@ void UdpServer::handleReceive(const boost::system::error_code& error,
     }
 
     
-    const sm_uint8_t* data = (const sm_uint8_t*)_recvBuffer.data();
+    sm_uint8_t* data = (sm_uint8_t*)_recvBuffer.data();
     if (isStun(data, size))
         handleStunPacket(data, size);
     else
@@ -233,7 +211,7 @@ void UdpServer::handleReceive(const boost::system::error_code& error,
     startReceive();
 }
 
-void UdpServer::handleMediaPacket(const sm_uint8_t* data, size_t size)
+void UdpServer::handleMediaPacket(sm_uint8_t* data, size_t size)
 {
     bool shouldBroadcast = true;
     sm_uint32_t ssrc = getSsrc(data, size);
@@ -248,74 +226,81 @@ void UdpServer::handleMediaPacket(const sm_uint8_t* data, size_t size)
         return;
     }
 
-    UserPtr user = it->second;
+    UserPtr user = it->second.user;
 
     // TODO: additional check for remote endpoint if it's registered
 
-    // TODO: check incoming SRTP/SRTCP packet authentication
-    // silently drop packet if not authenticated
+    // decode with original uplink SRTP context
+    int packetLen = size;
+    err_status_t res;
+    srtp_t session;
 
-    if (isRtcp(data, size))
+    if (it->second.linkType == MEDIA_LINK_TYPE_DOWNLINK)
     {
-        // try to decode and encode
-        int packetLen = size;
-        err_status_t res = srtp_unprotect_rtcp(_srtpInboundSession, (void*)data, &packetLen);
-        if (res != err_status_ok)
-        {
-            LOG_E("Failed to decode incoming RTCP packet: " << res);
-            return;
-        }
-
-        res = srtp_protect_rtcp(_srtpOutboundSession, (void*)data, &packetLen);
-        if (res != err_status_ok)
-        {
-            LOG_E("Failed to encode incoming RTCP packet: " << res);
-            return;
-        }
-        assert(packetLen == size);
+        session = user->_downlinks[it->second.senderUserId].srtpPeerSession;
     }
     else
     {
-        // try to decode and encode
-        int packetLen = size;
-        err_status_t res = srtp_unprotect(_srtpInboundSession, (void*)data, &packetLen);
-        if (res != err_status_ok)
-        {
-            LOG_E("Failed to decode incoming RTCP packet: " << res);
-            return;
-        }
+        session = user->_uplink.srtpPeerSession;
+    }
 
-        res = srtp_protect(_srtpOutboundSession, (void*)data, &packetLen);
-        if (res != err_status_ok)
-        {
-            LOG_E("Failed to encode incoming RTCP packet: " << res);
-            return;
-        }
-        assert(packetLen == size);
+    bool rtcp = false;
+    if (isRtcp(data, size))
+    {
+        rtcp = true;
+        res = srtp_unprotect_rtcp(session, data, &packetLen);
+    }
+    else
+    {
+        res = srtp_unprotect(session, data, &packetLen);
+    }
+
+    // TODO: block RTCP RR propagation (?)
+    // TODO: generate RTCP RR from incoming RTCP SR (?)
+
+    if (res != err_status_ok)
+    {
+        LOG_E("Failed to decode " << (rtcp ? "RTCP": "RTP") << " incoming packet; code: " << res
+            << "; SSRC: " << ssrc << "; key: " << base64Encode(&user->_uplink.peerKeySalt[0], user->_uplink.peerKeySalt.size()));
+        return;
     }
 
     if (shouldBroadcast)
-        broadcast(user, data, size);
-
-    // TODO: think how to handle ROC incremented before new user connected
-    // and received media stream. Is it possible to extract ROC from incoming RTP,
-    // save it in User and distribute along with new downlink connection establishment event
+        broadcast(user, data, packetLen);
 }
 
 
-void UdpServer::broadcast(const UserPtr& uplinkUser, const sm_uint8_t* data, size_t size)
+void UdpServer::broadcast(const UserPtr& uplinkUser, sm_uint8_t* data, size_t size)
 {
-    std::vector<TransportEndpoint> endpoints = gGlobalScope.getDownlinkEndpointsFor(uplinkUser->_userId);
-    BOOST_FOREACH(TransportEndpoint& te, endpoints)
+    std::vector<std::pair<TransportEndpoint, srtp_t> > endpoints =
+        gGlobalScope.getDownlinkEndpointsFor(uplinkUser->_userId);
+    typedef std::pair<TransportEndpoint, srtp_t> EP;
+    BOOST_FOREACH(EP& te, endpoints)
     {
-        if (!te.isSet())
+        if (!te.first.isSet())
         {
             // a few packets get here, because ICE processing takes time to finish
             // after new downlink connection is added in signaling channel
             LOG_W("Zero UDP port to send to");
             continue;
         }
-        _socket.send_to(boost::asio::buffer(data, size), te.udpEndpoint());
+
+        err_status_t res;
+        int packetLen = (int)size;
+        // reencode with downlink context
+        srtp_t session = te.second;
+        if (isRtcp(data, size))
+            res = srtp_protect_rtcp(session, data, &packetLen);
+        else
+            res = srtp_protect(session, data, &packetLen);
+
+        if (res != err_status_ok)
+        {
+            LOG_E("Failed to encode incoming RTCP packet: " << res);
+            return;
+        }
+
+        _socket.send_to(boost::asio::buffer(data, packetLen), te.first.udpEndpoint());
     }
 }
 
@@ -335,7 +320,7 @@ bool UdpServer::validateStunCredentials(StunAgent *agent,
     if (it != _this->_iceUnames.end())
     {
         LinkHelper& lh = it->second;
-        lh.user->getIcePassword(lh.linkType, lh.downlinkUserId,
+        lh.user->getIcePassword(lh.linkType, lh.senderUserId,
             password, passwordLen);
         // set mapped user info as side effect:
         _this->_iceUserRef = lh;
@@ -382,12 +367,12 @@ void UdpServer::handleStunPacket(const sm_uint8_t* data, size_t size)
                     // we've just concluded ICE-LITE processing according to RFC 5445 8.2.1
                     TransportEndpoint te(_remoteEndpoint);
                     bool result = _iceUserRef.user->updateIceEndpoint(_iceUserRef.linkType,
-                        _iceUserRef.downlinkUserId, te);
+                        _iceUserRef.senderUserId, te);
 
                     if (result && _iceUserRef.linkType == MEDIA_LINK_TYPE_DOWNLINK)
                     {
                         LOG_D("New donlink connection established. Requesting FIR for all other participants");
-                        requestFir(_iceUserRef.downlinkUserPeerVideoSsrc);
+                        requestFir(_iceUserRef.senderVideoSsrc);
                     }
                 }
                 _socket.send_to(boost::asio::buffer(&rbuf[0], rbufLen), _remoteEndpoint);

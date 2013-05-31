@@ -26,6 +26,12 @@ enum RtcpType
  */
 void generatePrintableBytes(size_t size, boost::mt19937& gen, std::vector<sm_uint8_t>* outBuf);
 
+void generateRandomBinaryVector(size_t size, boost::mt19937& gen, std::vector<sm_uint8_t>* outBuf);
+
+std::string generateKeySalt(boost::mt19937& gen);
+
+std::vector<sm_uint8_t> defaultSizeKeySalt(boost::mt19937& gen);
+
 /**
  * Returns true if buffer @data of size @len has signatures of STUN packet (RFC 5389 only)
  */
@@ -40,6 +46,10 @@ sm_uint32_t getSsrc(const sm_uint8_t* data, size_t len);
 bool isRtcp(const sm_uint8_t* data, size_t len);
 
 RtcpType getRtcpType(const sm_uint8_t* data, size_t len);
+
+std::string base64Encode(const std::vector<sm_uint8_t>& data);
+
+std::string base64Encode(unsigned char const* bytes_to_encode, unsigned int in_len);
 
 std::vector<sm_uint8_t> base64Decode(std::string const& encoded_string);
 

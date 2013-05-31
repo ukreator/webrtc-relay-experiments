@@ -97,6 +97,7 @@
       // use from audio, as we assume bundled connection
       resultH(mgSdp.mediaSections[0].attributes['ice-ufrag'],
               mgSdp.mediaSections[0].attributes['ice-pwd'],
+              mgSdp.mediaSections[0].crypto.key,
               // For use in handleStreamAnswer, JS -> relay -> JS
               JSON.stringify(sdp));
     };
@@ -164,18 +165,20 @@
   CA.PeerConnection.prototype._prepareOffer = function (params, offerSdp, mediaDirection) {
     var mgSdp = new ManageableSDP(offerSdp);
     for (var i = 0; i < mgSdp.mediaSections.length; i++) {
-      this._prepareOfferMediaSection(mgSdp.mediaSections[i], params.cryptoKey, params.offerSsrc[i], mediaDirection);
+      this._prepareOfferMediaSection(mgSdp.mediaSections[i], params.offerSsrc[i], mediaDirection);
     }
     return mgSdp;
   }
 
-  CA.PeerConnection.prototype._prepareOfferMediaSection = function (mediaSection, cryptoKey, ssrc, mediaDirection) {
+  CA.PeerConnection.prototype._prepareOfferMediaSection = function (mediaSection, ssrc, mediaDirection) {
     // set values from relay
     // 1. common SRTP key for all peers in a scope
-    mediaSection.crypto.key = cryptoKey;
+    //mediaSection.crypto.key = cryptoKey;
     // 2. unique server-generated SSRCs
     mediaSection.ssrc = ssrc;
     if (mediaSection.ssrcLabels['cname'] === undefined) {
+      // Set cname for receive-only (downlink) connection
+      // (it's not set by default).
       // FIXME: use proper random-generated value (or use algo from one of RFCs)
       mediaSection.ssrcLabels.cname = 'du4X8c59zH/810bO';
     }
@@ -200,6 +203,7 @@
       // remove SSRC lines from original offer
       // TODO: add streamer SSRCs if necessary (params.answerSsrc has these values)
       mgAnswer.mediaSections[i].ssrcLabels = {};
+      mgAnswer.mediaSections[i].crypto.key = params.cryptoKey;
     }
 
     mgAnswer.flush();
@@ -273,7 +277,8 @@
       if (!this._candidatesMap) this._candidatesMap = {}
       if (!this._candidatesMap[candidateId]) {
         this._candidatesMap[candidateId] = 1;
-        this.signalingTransport.sendIceCandidate(e.candidate.sdpMid, foundation, priority, ipAddr, port);
+        // skip sending ICE candidates for ICE-LITE for now
+        //this.signalingTransport.sendIceCandidate(e.candidate.sdpMid, foundation, priority, ipAddr, port);
       } else {
         log.debug("[PC] = Skipped repeated ICE candidate");
       }

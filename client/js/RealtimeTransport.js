@@ -57,12 +57,13 @@
     };
   };
 
-  CA.RealtimeTransport.authRequest = function (userId, scopeId, iceUfrag, icePwd, offerSdp) {
+  CA.RealtimeTransport.authRequest = function (userId, scopeId, iceUfrag, icePwd, cryptoKey, offerSdp) {
     var authRequest = {
       userId: CA.ownClientId,
       scopeId: scopeId,
       iceUfrag: iceUfrag,
       icePwd: icePwd,
+      cryptoKey: cryptoKey,
       offerSdp: offerSdp
     };
     log.debug('[RT] = Sending auth request');
@@ -70,12 +71,13 @@
       authRequest);
   };
   
-  CA.RealtimeTransport.newDownlinkConnection = function (userId, iceUfrag, icePwd, sdp) {
+  CA.RealtimeTransport.newDownlinkConnection = function (userId, iceUfrag, icePwd, cryptoKey, sdp) {
     var request = {
       eventType: 'startNewDownlink',
       userId: userId,
       iceUfrag: iceUfrag,
       icePwd: icePwd,
+      cryptoKey: cryptoKey,
       offerSdp: sdp
     };
     log.debug('[RT] = Sending request to start new downlink connection: ' + JSON.stringify(request));

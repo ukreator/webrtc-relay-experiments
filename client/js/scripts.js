@@ -48,8 +48,8 @@ CA = {};
 
     uplinkConnection.setSignalingTransportHandler(CA.RealtimeTransport);
 
-    var onOffer = function (iceUfrag, icePwd, offerSdp) {
-      CA.RealtimeTransport.authRequest(CA.ownClientId, scopeId, iceUfrag, icePwd, offerSdp);
+    var onOffer = function (iceUfrag, icePwd, cryptoKey, offerSdp) {
+      CA.RealtimeTransport.authRequest(CA.ownClientId, scopeId, iceUfrag, icePwd, cryptoKey, offerSdp);
     };
     
     // this will trigger ICE discovery:
@@ -90,8 +90,8 @@ CA = {};
       var downlinkConnection =
           new CA.PeerConnection(CA.PeerConnectionType.PC_TYPE_DOWNLINK, {rendererId: 'remoteVideoRenderer'});
       downlinkConnection.setSignalingTransportHandler(CA.RealtimeTransport);
-      var onOffer = function (iceUfrag, icePwd, sdp) {
-        CA.RealtimeTransport.newDownlinkConnection(uevent.userId, iceUfrag, icePwd, sdp);
+      var onOffer = function (iceUfrag, icePwd, cryptoKey, sdp) {
+        CA.RealtimeTransport.newDownlinkConnection(uevent.userId, iceUfrag, icePwd, cryptoKey, sdp);
       };
       downlinkConnection.makeOffer(onOffer);
       CA.downlinkConnections[uevent.userId] = downlinkConnection;

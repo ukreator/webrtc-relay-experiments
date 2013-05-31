@@ -6,19 +6,17 @@
 #include <User.hpp>
 
 #include <boost/foreach.hpp>
-#include <boost/thread.hpp>
 
 class Scope
 {
 public:
-	Scope(const std::string& scopeId): _scopeId(scopeId)
+	Scope(const std::string& scopeId)
 	{
-		_keyAndSalt = "jJv7OTSY+x5YFIisLr59b5OVIBCrHT+5gK6OZmNd";
 	}
 
-    std::vector<TransportEndpoint> getDownlinkEndpointsFor(int userId)
+    std::vector<std::pair<TransportEndpoint, srtp_t> > getDownlinkEndpointsFor(int userId)
     {
-        std::vector<TransportEndpoint> endpoints;
+        std::vector<std::pair<TransportEndpoint, srtp_t> > endpoints;
         // enumerate all users in this room except uplink one
         BOOST_FOREACH(UsersMap::value_type& u, _users)
         {
@@ -27,7 +25,8 @@ public:
                 // search for userId in downlink connections for the specific user
                 User::DownlinksMap::iterator it = u.second->_downlinks.find(userId);
                 if (it != u.second->_downlinks.end())
-                    endpoints.push_back(it->second.transportEndpoint);
+                    endpoints.push_back(std::make_pair(it->second.transportEndpoint,
+                        it->second.srtpStreamerSession));
             }
         }
         return endpoints;
@@ -36,11 +35,6 @@ public:
     void addUser(int userId, UserPtr user)
     {
         _users.insert(std::make_pair(userId, user));
-    }
-
-    const std::string keyAndSalt() const
-    {
-        return _keyAndSalt;
     }
 
     UserPtr getUser(int userId)
@@ -53,7 +47,6 @@ public:
 
 private:
 	std::string _scopeId;
-	std::string _keyAndSalt;
 
     typedef std::map<int, UserPtr> UsersMap;
     UsersMap _users;

@@ -1,6 +1,7 @@
 #include <UdpServer.hpp>
 #include <User.hpp>
 #include <IceCredentials.hpp>
+#include <SrtpSession.hpp>
 #include <Scope.hpp>
 #include <Log.hpp>
 
@@ -89,9 +90,146 @@ public:
         sendJson(hdl, uevent);
     }
     
+    void handleAuthRequest(connection_hdl hdl, const Json::Value& params)
+    {
+        Json::Value result;
+        int userId = params["userId"].asInt();
+        std::string scopeId = params["scopeId"].asString();
+
+        IceCredentialsPtr iceCreds = boost::make_shared<IceCredentials>(boost::ref(_randomGenerator));
+        iceCreds->setRemoteCredentials(params["iceUfrag"].asString(),
+            params["icePwd"].asString());
+        UserPtr user = boost::make_shared<User>(userId, scopeId);
+
+        LinkInfo uplink;
+        uplink.peerAudioSsrc = newSsrc();
+        uplink.peerVideoSsrc = newSsrc();
+        uplink.streamerAudioSsrc = newSsrc();
+        uplink.streamerVideoSsrc = newSsrc();
+        uplink.iceCredentials = iceCreds;
+
+        uplink.peerKeySalt = base64Decode(params["cryptoKey"].asString());
+        initSrtpSession(&uplink.srtpPeerSession, uplink.peerKeySalt, ssrc_any_inbound);
+
+        uplink.streamerKeySalt = defaultSizeKeySalt(_randomGenerator);
+        initSrtpSession(&uplink.srtpStreamerSession, uplink.streamerKeySalt, ssrc_any_outbound);
+
+        user->_uplink = uplink;
+        assert(user->_uplink.iceCredentials);
+        user->_uplinkOfferSdp = params["offerSdp"].asString();
+
+        _signalingUsers.insert(std::make_pair(hdl, user));
+
+        _udpServer->addUser(user);
+        gGlobalScope.addUser(userId, user);
+
+        result["type"] = "authResponse";
+        Json::Value data;
+
+        data["cryptoKey"] = base64Encode(uplink.streamerKeySalt);
+        data["peerAudioSsrc"] = uplink.peerAudioSsrc;
+        data["peerVideoSsrc"] = uplink.peerVideoSsrc;
+        data["streamerAudioSsrc"] = uplink.streamerAudioSsrc;
+        data["streamerVideoSsrc"] = uplink.streamerVideoSsrc;
+
+        data["iceUfrag"] = iceCreds->localUfrag();
+        data["icePwd"] = iceCreds->localPwd();
+        // foundation component-id protocol priority address port type
+        data["candidate"] = gServerCandidate;
+        data["port"] = gServerPortStr; //< for m= lines
+        data["address"] = gServerIpAddr; //< for c= lines
+        data["offerSdp"] = user->_uplinkOfferSdp;
+
+        result["data"] = data;
+        sendJson(hdl, result);
+
+        // notify other clients about current user connected
+        BOOST_FOREACH(SignalingMap::value_type& userPair, _signalingUsers)
+        {
+            if (userPair.first.lock().get() != hdl.lock().get())
+            {
+                reportConnectedUser(userPair.first, user);
+            }
+        }
+
+        // send info about users already present in current room to this user
+        BOOST_FOREACH(SignalingMap::value_type& userPair, _signalingUsers)
+        {
+            if (userPair.first.lock().get() != hdl.lock().get())
+                reportConnectedUser(hdl, userPair.second);
+        }
+    }
+
+    void handleStartNewDownlink(connection_hdl hdl, const Json::Value& params)
+    {
+        Json::Value result;
+        UserPtr user = getUserByConnection(hdl);
+        if (!user)
+        {
+            LOG_E("User not authenticated");
+            return;
+        }
+
+        IceCredentialsPtr iceCreds = boost::make_shared<IceCredentials>(boost::ref(_randomGenerator));
+        iceCreds->setRemoteCredentials(params["iceUfrag"].asString(),
+            params["icePwd"].asString());
+
+        int senderUserId = params["userId"].asInt();
+        UserPtr senderUser = gGlobalScope.getUser(senderUserId);
+        assert(senderUser);
+
+        LinkInfo downlink;
+        downlink.iceCredentials = iceCreds;
+        // JS SSRCs for RTCP RR and RTCP feedback packets
+        downlink.peerAudioSsrc = newSsrc();
+        downlink.peerVideoSsrc = newSsrc();
+        // These SSRCs will be used in SDP answer from streamer.
+        // We don't remap remote user's uplink SSRCs, just announce them to new
+        // downlink connection.
+        downlink.streamerAudioSsrc = senderUser->_uplink.peerAudioSsrc;
+        downlink.streamerVideoSsrc = senderUser->_uplink.peerVideoSsrc;
+
+        downlink.peerKeySalt = base64Decode(params["cryptoKey"].asString());
+        initSrtpSession(&downlink.srtpPeerSession, downlink.peerKeySalt, ssrc_any_inbound);
+
+        downlink.streamerKeySalt = defaultSizeKeySalt(_randomGenerator);
+        initSrtpSession(&downlink.srtpStreamerSession, downlink.streamerKeySalt, ssrc_any_outbound);
+
+        user->_downlinks[senderUserId] = downlink;
+        _udpServer->addLink(iceCreds->verifyingUname(), user,
+            MEDIA_LINK_TYPE_DOWNLINK, downlink.peerAudioSsrc, downlink.peerVideoSsrc,
+            senderUserId, downlink.streamerVideoSsrc);
+
+        result["type"] = "userEvent";
+        Json::Value data;
+        data["eventType"] = "downlinkConnectionAnswer";
+        data["userId"] = senderUserId;
+        data["cryptoKey"] = base64Encode(downlink.streamerKeySalt);
+        LOG_D("Setting key " << base64Encode(downlink.streamerKeySalt) << " for s->p for SSRCs " << downlink.streamerAudioSsrc);
+
+        data["iceUfrag"] = iceCreds->localUfrag();
+        data["icePwd"] = iceCreds->localPwd();
+
+        data["offerSdp"] = params["offerSdp"];
+        data["answerSdp"] = senderUser->_uplinkOfferSdp;
+
+        data["peerAudioSsrc"] = downlink.peerAudioSsrc;
+        data["peerVideoSsrc"] = downlink.peerVideoSsrc;
+        data["streamerAudioSsrc"] = downlink.streamerAudioSsrc;
+        data["streamerVideoSsrc"] = downlink.streamerVideoSsrc;
+
+        // foundation component-id protocol priority address port type
+        data["candidate"] = gServerCandidate;
+        data["port"] = gServerPortStr; //< for m= lines
+        data["address"] = gServerIpAddr; //< for c= lines
+
+        result["data"] = data;
+        sendJson(hdl, result);
+    }
+
     void onMessage(connection_hdl hdl, server::message_ptr msg)
     {
-        LOG_D("Got message: " << msg->get_payload());
+        //LOG_D("Got message: " << msg->get_payload());
 
         Json::Reader reader;
         Json::Value root;
@@ -102,121 +240,19 @@ public:
             return;
         }
 
-        Json::Value result;
+        
         std::string msgType = root["type"].asString();
         Json::Value params = root["data"];
 
         if (msgType == "authRequest")
         {
-            int userId = params["userId"].asInt();
-            std::string scopeId = params["scopeId"].asString();
-
-            IceCredentialsPtr iceCreds = boost::make_shared<IceCredentials>(boost::ref(_randomGenerator));
-            iceCreds->setRemoteCredentials(params["iceUfrag"].asString(),
-                params["icePwd"].asString());
-            UserPtr user = boost::make_shared<User>(userId, scopeId, iceCreds);
-
-            user->_uplink.peerAudioSsrc = newSsrc();
-            user->_uplink.peerVideoSsrc = newSsrc();
-            user->_uplink.streamerAudioSsrc = newSsrc();
-            user->_uplink.streamerVideoSsrc = newSsrc();
-            
-            user->_uplinkOfferSdp = params["offerSdp"].asString();
-
-            _signalingUsers.insert(std::make_pair(hdl, user));
-
-            _udpServer->addUser(user);
-            gGlobalScope.addUser(userId, user);
-
-            result["type"] = "authResponse";
-            Json::Value data;
-            data["cryptoKey"] = gGlobalScope.keyAndSalt();
-            data["peerAudioSsrc"] = user->_uplink.peerAudioSsrc;
-            data["peerVideoSsrc"] = user->_uplink.peerVideoSsrc;
-            data["streamerAudioSsrc"] = user->_uplink.streamerAudioSsrc;
-            data["streamerVideoSsrc"] = user->_uplink.streamerVideoSsrc;
-            data["iceUfrag"] = iceCreds->localUfrag();
-            data["icePwd"] = iceCreds->localPwd();
-            // foundation component-id protocol priority address port type
-            data["candidate"] = gServerCandidate;
-            data["port"] = gServerPortStr; //< for m= lines
-            data["address"] = gServerIpAddr; //< for c= lines
-            data["offerSdp"] = user->_uplinkOfferSdp;
-
-            result["data"] = data;
-            sendJson(hdl, result);
-
-            // notify other clients about current user connected
-            BOOST_FOREACH(SignalingMap::value_type& userPair, _signalingUsers)
-            {
-                if (userPair.first.lock().get() != hdl.lock().get())
-                {
-                    reportConnectedUser(userPair.first, user);
-                }
-            }
-
-            // send info about users already present in current room to this user
-            BOOST_FOREACH(SignalingMap::value_type& userPair, _signalingUsers)
-            {
-                if (userPair.first.lock().get() != hdl.lock().get())
-                    reportConnectedUser(hdl, userPair.second);
-            }
+            handleAuthRequest(hdl, params);
         }
         else if (msgType == "userEvent")
         {
             if (params["eventType"] == "startNewDownlink")
             {
-                UserPtr user = getUserByConnection(hdl);
-                if (!user)
-                {
-                    LOG_E("User not authenticated");
-                    return;
-                }
-
-                IceCredentialsPtr iceCreds = boost::make_shared<IceCredentials>(boost::ref(_randomGenerator));
-                iceCreds->setRemoteCredentials(params["iceUfrag"].asString(),
-                    params["icePwd"].asString());
-
-                int downlinkUserId = params["userId"].asInt();
-                UserPtr downlinkUser = gGlobalScope.getUser(downlinkUserId);
-                assert(downlinkUser);
-
-                LinkInfo downlink;
-                downlink.iceCredentials = iceCreds;
-                
-                // JS SSRCs for RTCP RR and RTCP feedback packets
-                unsigned peerAudioSsrc = newSsrc();
-                unsigned peerVideoSsrc = newSsrc();
-
-                user->_downlinks[downlinkUserId] = downlink;
-                _udpServer->addLink(iceCreds->verifyingUname(), user,
-                    MEDIA_LINK_TYPE_DOWNLINK, peerAudioSsrc, peerVideoSsrc,
-                    downlinkUserId, downlinkUser->_uplink.peerVideoSsrc);
-
-                result["type"] = "userEvent";
-                Json::Value data;
-                data["eventType"] = "downlinkConnectionAnswer";
-                data["userId"] = downlinkUserId;
-                data["cryptoKey"] = gGlobalScope.keyAndSalt();
-                data["peerAudioSsrc"] = peerAudioSsrc;
-                data["peerVideoSsrc"] = peerVideoSsrc;
-                data["iceUfrag"] = iceCreds->localUfrag();
-                data["icePwd"] = iceCreds->localPwd();
-
-                data["offerSdp"] = params["offerSdp"];
-                data["answerSdp"] = downlinkUser->_uplinkOfferSdp;
-                // these SSRCs will be used in SDP answer from streamer
-                // for WebRtc client to recognize remote data
-                data["streamerAudioSsrc"] = downlinkUser->_uplink.peerAudioSsrc;
-                data["streamerVideoSsrc"] = downlinkUser->_uplink.peerVideoSsrc;
-
-                // foundation component-id protocol priority address port type
-                data["candidate"] = gServerCandidate;
-                data["port"] = gServerPortStr; //< for m= lines
-                data["address"] = gServerIpAddr; //< for c= lines
-
-                result["data"] = data;
-                sendJson(hdl, result);
+                handleStartNewDownlink(hdl, params);
             }
             else
             {
