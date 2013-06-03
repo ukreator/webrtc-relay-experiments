@@ -19,16 +19,16 @@
   CA.PeerConnection = function (connectionType, renderingParams) {
     log = w.log;
     log.debug("[PC] = Creating new PeerConnection of type " + connectionType);
-    var pcConfig = {"iceServers":[
-      {"url":"stun:stun.l.google.com:19302"}
-    ]};
+    //var pcConfig = {"iceServers":[
+      //{"url":"stun:stun.l.google.com:19302"}
+    //]};
     var pcConstraints = {"optional":[
       {"DtlsSrtpKeyAgreement":false}
     ]};
     
     this.connectionType = connectionType;
 
-    this._nativePC = new PeerConnection(pcConfig, pcConstraints);
+    this._nativePC = new PeerConnection(null, pcConstraints);
     this._nativePC.onicecandidate = this._createProxy('_onLocalIceCandidate');
     this._nativePC.oniceconnectionstatechange = this._createProxy('_onIceConnectionStateChange');
     this._nativePC.onconnecting =
