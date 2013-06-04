@@ -131,18 +131,9 @@ void UdpServer::removeUser(UserPtr user)
     }
 }
 
-void UdpServer::requestFir(sm_uint32_t senderSsrc)
+void UdpServer::requestFir(UserPtr sender)
 {
-    SsrcToUserMap::iterator it = _ssrcUsers.find(senderSsrc);
-    if (it == _ssrcUsers.end())
-    {
-        LOG_E("No uplink found for SSRC " << senderSsrc);
-        assert(!"No uplink for SSRC");
-        return;
-    }
-
-    UserPtr sender = it->second.user;
-    assert(senderSsrc == sender->_uplink.peerVideoSsrc);
+    sm_uint32_t senderSsrc = sender->_uplink.peerVideoSsrc;
     std::vector<sm_uint8_t> buf;
     generateRtcpFir(buf, sender->_uplink.streamerVideoSsrc, senderSsrc, 0);
 
@@ -159,6 +150,20 @@ void UdpServer::requestFir(sm_uint32_t senderSsrc)
     _socket.send_to(boost::asio::buffer(&buf[0], packetLen), sender->_uplink.transportEndpoint.udpEndpoint());
     LOG_D("FIR sent from ssrc " << sender->_uplink.streamerVideoSsrc
         << " to ssrc " << senderSsrc << " on endpoint " << sender->_uplink.transportEndpoint.udpEndpoint());
+}
+
+void UdpServer::requestFir(sm_uint32_t senderSsrc)
+{
+    SsrcToUserMap::iterator it = _ssrcUsers.find(senderSsrc);
+    if (it == _ssrcUsers.end())
+    {
+        LOG_E("No uplink found for SSRC " << senderSsrc);
+        assert(!"No uplink for SSRC");
+        return;
+    }
+    UserPtr sender = it->second.user;
+    assert(senderSsrc == sender->_uplink.peerVideoSsrc);
+    requestFir(sender);
 }
 
 void UdpServer::handleReceive(const boost::system::error_code& error,

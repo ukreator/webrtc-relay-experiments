@@ -227,6 +227,34 @@ public:
         sendJson(hdl, result);
     }
 
+
+    void handleMediaPublishStatus(connection_hdl hdl, const Json::Value& msg)
+    {
+        Json::Value result;
+        UserPtr user = getUserByConnection(hdl);
+        if (!user)
+        {
+            LOG_E("User not authenticated yet");
+            return;
+        }
+
+        int senderUserId = msg["data"]["userId"].asInt();
+        UserPtr senderUser = gGlobalScope.getUser(senderUserId);
+        assert(senderUser);
+
+        // notify other clients about media status
+        BOOST_FOREACH(SignalingMap::value_type& userPair, _signalingUsers)
+        {
+            if (userPair.first.lock().get() != hdl.lock().get())
+            {
+                sendJson(userPair.first, msg);
+            }
+        }
+
+        if (msg["data"]["videoPublished"].asBool())
+            _udpServer->requestFir(user);
+    }
+
     void onMessage(connection_hdl hdl, server::message_ptr msg)
     {
         //LOG_D("Got message: " << msg->get_payload());
@@ -253,6 +281,10 @@ public:
             if (params["eventType"] == "startNewDownlink")
             {
                 handleStartNewDownlink(hdl, params);
+            }
+            else if (params["eventType"] == "mediaPublishStatus")
+            {
+                handleMediaPublishStatus(hdl, root);
             }
             else
             {

@@ -39,7 +39,8 @@ public:
 
     void removeUser(UserPtr user);
 
-    void requestFir(sm_uint32_t downlinkUserPeerVideoSsrc);
+    void requestFir(sm_uint32_t senderPeerVideoSsrc);
+    void requestFir(UserPtr senderUser);
 
 private:
 

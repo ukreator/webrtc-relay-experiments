@@ -135,9 +135,8 @@
     var adjustedOfferSdp = mgSdp.toRtcSessionDescription();
 
     log.debug('[PC] = Adjusted offer: ' + adjustedOfferSdp.sdp);
-    self._nativePC.setLocalDescription(adjustedOfferSdp, onLocalDescriptorSet, function(msg){log.error(msg)});
    
-    function onLocalDescriptorSet() {
+    var onLocalDescriptorSet = function () {
       // we have all required data to create SDP answer in behalf of streamer
       var answerSdp;
       if (uplink) {
@@ -148,12 +147,14 @@
       }
       log.debug("[PC] = Answer created to feed setRemoteDescription: " + answerSdp.sdp);
     
-      function onRemoteDescriptionSet() {
+      var onRemoteDescriptionSet = function () {
         log.debug('[PC] = Remote SDP set');
-      }
+      };
     
       self._nativePC.setRemoteDescription(answerSdp, onRemoteDescriptionSet, function(msg){log.error(msg)});
-    }
+    };
+
+    self._nativePC.setLocalDescription(adjustedOfferSdp, onLocalDescriptorSet, function(msg){log.error(msg)});
   };
 
   CA.PeerConnection.prototype.close = function () {
@@ -161,6 +162,42 @@
     this._nativePC.close();
     this.state = CA.PeerConnection.ConnectionState.NOT_CONNECTED;
   };
+
+  CA.PeerConnection.prototype.changeMediaStatus = function (mediaIndex, isPublished) {
+    log.debug("[PC] = changing media publishing status for component " + mediaIndex +
+     " to " + isPublished);
+    var directionOffer,
+        directionAnswer;
+    var self = this;
+    if (!isPublished) {
+      directionOffer = 'inactive';
+      directionAnswer = 'inactive';
+    } else {
+      directionOffer = 'sendonly';
+      directionAnswer = 'recvonly';
+    }
+
+    var mgSdp = new ManageableSDP(self._nativePC.localDescription);
+    mgSdp.mediaSections[mediaIndex].direction = directionOffer;
+    mgSdp.flush();
+
+    self._nativePC.setLocalDescription(mgSdp.toRtcSessionDescription(),
+      function () {
+        mgSdp = new ManageableSDP(self._nativePC.remoteDescription);
+        mgSdp.mediaSections[mediaIndex].direction = directionAnswer;
+        mgSdp.flush();
+        
+        log.debug("[PC] = Answer created to feed setRemoteDescription: " + mgSdp.sdp);
+      
+        var onRemoteDescriptionSet = function () {
+          log.debug('[PC] = Remote SDP set');
+        };
+      
+        self._nativePC.setRemoteDescription(mgSdp.toRtcSessionDescription(),
+          onRemoteDescriptionSet, function (msg) { log.error(msg) });
+      },
+      function (msg) { log.error(msg) });
+  };  
 
   CA.PeerConnection.prototype._prepareOffer = function (params, offerSdp, mediaDirection) {
     var mgSdp = new ManageableSDP(offerSdp);

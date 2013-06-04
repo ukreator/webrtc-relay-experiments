@@ -84,6 +84,18 @@
     socket.emit(CA.MessageType.USER_EVENT,
       request);
   };
+
+  CA.RealtimeTransport.mediaPublishStatus = function (userId, audioPublished, videoPublished) {
+    var request = {
+      eventType: 'mediaPublishStatus',
+      userId: userId,
+      audioPublished: audioPublished,
+      videoPublished: videoPublished
+    };
+    log.debug('[RT] = Sending media publish status message: ' + JSON.stringify(request));
+    socket.emit(CA.MessageType.USER_EVENT,
+      request);
+  };
   
   CA.RealtimeTransport.sendIceCandidate = function (mediaType, foundation, priority, ipAddr, port) {
     var iceCandidate = {
@@ -143,7 +155,8 @@
 
   CA.UserEventTypes = {
     NEW_USER: 'newUser',
-    DOWNLINK_CONNECTION_ANSWER: 'downlinkConnectionAnswer'
+    DOWNLINK_CONNECTION_ANSWER: 'downlinkConnectionAnswer',
+    MEDIA_PUBLISH_STATUS: 'mediaPublishStatus'
   };
 
 }(window, jQuery));

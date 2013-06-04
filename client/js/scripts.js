@@ -69,6 +69,11 @@ CA = {};
     delete CA.joinedScope; */
   };
 
+  CA.toggleVideo = function () {
+    CA.videoEnabled = !CA.videoEnabled;
+    CA.uplinkConnection.changeMediaStatus(1, CA.videoEnabled);
+    CA.RealtimeTransport.mediaPublishStatus(CA.ownClientId, true, CA.videoEnabled);
+  };
 
   /**
    * ===========================================================================
@@ -85,19 +90,30 @@ CA = {};
 
   function _onUserEvent(uevent) {
     log.debug('Got user event: ' + JSON.stringify(uevent));
-    if (uevent.eventType == CA.UserEventTypes.NEW_USER) {
-      // todo: assign new renderer for each new user
-      var downlinkConnection =
-          new CA.PeerConnection(CA.PeerConnectionType.PC_TYPE_DOWNLINK, {rendererId: 'remoteVideoRenderer'});
-      downlinkConnection.setSignalingTransportHandler(CA.RealtimeTransport);
-      var onOffer = function (iceUfrag, icePwd, cryptoKey, sdp) {
-        CA.RealtimeTransport.newDownlinkConnection(uevent.userId, iceUfrag, icePwd, cryptoKey, sdp);
-      };
-      downlinkConnection.makeOffer(onOffer);
-      CA.downlinkConnections[uevent.userId] = downlinkConnection;
-    } else if (uevent.eventType == CA.UserEventTypes.DOWNLINK_CONNECTION_ANSWER) {
-      CA.downlinkConnections[uevent.userId].handleStreamerAnswer(uevent);
+    switch (uevent.eventType) {
+      case CA.UserEventTypes.NEW_USER:
+        // todo: assign new renderer for each new user
+        var downlinkConnection =
+            new CA.PeerConnection(CA.PeerConnectionType.PC_TYPE_DOWNLINK, {rendererId: 'remoteVideoRenderer'});
+        downlinkConnection.setSignalingTransportHandler(CA.RealtimeTransport);
+        var onOffer = function (iceUfrag, icePwd, cryptoKey, sdp) {
+          CA.RealtimeTransport.newDownlinkConnection(uevent.userId, iceUfrag, icePwd, cryptoKey, sdp);
+        };
+        downlinkConnection.makeOffer(onOffer);
+        CA.downlinkConnections[uevent.userId] = downlinkConnection;
+        break;
+      case CA.UserEventTypes.DOWNLINK_CONNECTION_ANSWER:
+        CA.downlinkConnections[uevent.userId].handleStreamerAnswer(uevent);
+        break;
+      case CA.UserEventTypes.MEDIA_PUBLISH_STATUS:
+        _onRemoteUserMediaStatus(uevent);
+        break;
     }
+  }
+
+  function _onRemoteUserMediaStatus(msg) {
+    log.debug('Handling publish/unpublish event from remote user');
+    // TODO: offer-answer adjustment, renderer disposing
   }
 
   /**
@@ -120,6 +136,8 @@ CA = {};
   function _initUI() {
     $('#joinBtn').click(CA.join);
     $('#leaveBtn').click(CA.leave);
+    CA.videoEnabled = true;
+    $('#toggleVideoBtn').click(CA.toggleVideo);
   }
 
 
