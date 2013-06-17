@@ -2,13 +2,63 @@
 #include <Log.hpp>
 #include <srtp.h>
 #include <boost/shared_ptr.hpp>
+#include <boost/thread.hpp>
 #include <string>
 
 const int SRTCP_INDEX_LEN = 4;
 const int SRTCP_MAX_TRAILER_LEN = SRTP_MAX_TRAILER_LEN + SRTCP_INDEX_LEN;
 
+namespace
+{
+/**
+ * Helper class for lazy initialization of libsrtp context
+ * and automatic clean up on application close.
+ */
+class GlobalLibsrtpContext
+{
+public:
+    GlobalLibsrtpContext(): _initialized(false)
+    {
+        err_status_t status = srtp_init();
+        assert(status == err_status_ok);
+        if (status == err_status_ok)
+            _initialized = true;
+        LOG_D("libsrtp initialized");
+    }
 
-SrtpSession::SrtpSession() {}
+    ~GlobalLibsrtpContext()
+    {
+        if (_initialized)
+            srtp_shutdown();
+        LOG_D("libsrtp shut down");
+    }
+
+    static void init()
+    {
+        boost::call_once(_flag, initOnce);
+    }
+
+private:
+
+    static void initOnce()
+    {
+        _globalCtx.reset(new GlobalLibsrtpContext());
+    }
+
+    bool _initialized;
+
+    static boost::once_flag _flag;
+    static boost::shared_ptr<GlobalLibsrtpContext> _globalCtx;
+};
+
+boost::once_flag GlobalLibsrtpContext::_flag;
+boost::shared_ptr<GlobalLibsrtpContext> GlobalLibsrtpContext::_globalCtx;
+}
+
+SrtpSession::SrtpSession()
+{
+    GlobalLibsrtpContext::init();
+}
 
 void SrtpSession::setKey(const std::vector<sm_uint8_t>& keySalt,
                             SrtpSessionDirection direction)
@@ -92,13 +142,4 @@ void SrtpSession::freeCtx(srtp_t* ctx)
     delete ctx;
 }
 
-void initSrtpLibrary()
-{
-    err_status_t status = srtp_init();
-    assert(status == err_status_ok);
-}
 
-void releaseGlobalSrtp()
-{
-
-}

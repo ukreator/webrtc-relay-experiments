@@ -35,10 +35,7 @@ public:
 private:
 
     static void freeCtx(srtp_t* ctx);
-    boost::shared_ptr<srtp_t> _srtpCtx;
+    boost::shared_ptr<srtp_t> _srtpCtx;    
 };
-
-void initSrtpLibrary();
-void releaseGlobalSrtp();
 
 #endif

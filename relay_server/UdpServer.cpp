@@ -18,13 +18,10 @@ UdpServer::UdpServer(boost::asio::io_service& ioService,
         | STUN_AGENT_USAGE_NO_INDICATION_AUTH);
     stun_agent_init(&_stunAgent, STUN_ALL_KNOWN_ATTRIBUTES, STUN_COMPATIBILITY_RFC5389,
         flags);
-
-    initSrtpLibrary();
 }
 
 UdpServer::~UdpServer()
 {
-    //srtp_dealloc(_srtpOutboundSession);
 }
 
 void UdpServer::start(sm_uint16_t port)
@@ -370,7 +367,7 @@ void UdpServer::handleStunPacket(const sm_uint8_t* data, size_t size)
                 bool useCandidate = stun_usage_ice_conncheck_use_candidate(&request);
                 if (useCandidate)
                 {
-                    // we've just concluded ICE-LITE processing according to RFC 5445 8.2.1
+                    // we've just concluded ICE-LITE processing according to RFC 5245 8.2.1
                     TransportEndpoint te(_remoteEndpoint);
                     bool result = _iceUserRef.user->updateIceEndpoint(_iceUserRef.linkType,
                         _iceUserRef.senderUserId, te);

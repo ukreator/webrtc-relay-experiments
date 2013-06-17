@@ -40,7 +40,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="&quot;C:\work\boost\include\boost-1_53&quot;;C:\work\builds\websocketpp;..\..\jsoncpp\include;..\..\stun;..\..\;..\..\libsrtp\include;..\..\libsrtp\crypto\include;..\..\libsrtp\win32"
+				AdditionalIncludeDirectories="&quot;C:\work\boost\include\boost-1_53&quot;;C:\work\builds\websocketpp;..\..\jsoncpp\include;..\..\stun;..\..\;..\..\libsrtp\include;..\..\libsrtp\crypto\include"
 				PreprocessorDefinitions="WIN32;_WIN32;_UNICODE;UNICODE;_WIN32_WINNT=0x0601"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
