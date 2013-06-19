@@ -251,8 +251,8 @@ public:
             }
         }
 
-        if (msg["data"]["videoPublished"].asBool())
-            _udpServer->requestFir(user);
+        //if (msg["data"]["videoPublished"].asBool())
+        //    _udpServer->requestFir(user);
     }
 
     void onMessage(connection_hdl hdl, server::message_ptr msg)
@@ -327,27 +327,10 @@ public:
         return it->second;
     }
 
-    void run(uint16_t port)
+    void start(uint16_t port)
     {
         _server.listen(port);
         _server.start_accept();
-
-        try
-        {
-            _server.run();
-        }
-        catch (const std::exception & e)
-        {
-            std::cout << e.what() << std::endl;
-        }
-        catch (websocketpp::lib::error_code e)
-        {
-            std::cout << e.message() << std::endl;
-        }
-        catch (...)
-        {
-            std::cout << "other exception" << std::endl;
-        }
     }
 private:
     server _server;
@@ -362,6 +345,26 @@ private:
     boost::mt19937 _randomGenerator;
 };
 
+void run(boost::asio::io_service& ioService)
+{
+    try
+    {
+        ioService.run();
+    }
+    catch (const std::exception & e)
+    {
+        std::cout << e.what() << std::endl;
+    }
+    catch (websocketpp::lib::error_code e)
+    {
+        std::cout << e.message() << std::endl;
+    }
+    catch (...)
+    {
+        std::cout << "other exception" << std::endl;
+    }
+}
+
 int main()
 {
     LOG_D("starting server");
@@ -371,10 +374,11 @@ int main()
     UdpServer udpServer(ioService, boost::asio::ip::address_v4::from_string(gServerIpAddr));
     server.setUdpServer(&udpServer);
     udpServer.start(gServerPort);
-    boost::thread thr(bind(&BroadcastServer::run, &server, gSignalingPort));
-    
-    thr.join();
-    LOG_D("server finished working");
+    server.start(gSignalingPort);
 
+    boost::thread thr(bind(run, boost::ref(ioService)));
+    thr.join();
+
+    LOG_D("server finished working");
     return 0;
 }
