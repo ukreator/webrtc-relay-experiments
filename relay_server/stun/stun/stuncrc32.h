@@ -1,9 +1,10 @@
 /*
  * This file is part of the Nice GLib ICE library.
  *
- * (C) 2008 Collabora Ltd. All rights reserved.
+ * (C) 2008-2009 Collabora Ltd.
  *  Contact: Youness Alaoui
- * (C) 2008 Nokia Corporation. All rights reserved.
+ * (C) 2006-2007 Nokia Corporation. All rights reserved.
+ *  Contact: Rémi Denis-Courmont
  *
  * The contents of this file are subject to the Mozilla Public License Version
  * 1.1 (the "License"); you may not use this file except in compliance with
@@ -34,17 +35,25 @@
  * file under either the MPL or the LGPL.
  */
 
+#ifndef _CRC32_H
+#define _CRC32_H
 
-#ifndef RAND_H
-#define RAND_H
 
-
-#ifdef _WIN32
+#if defined(_MSC_VER)
 #include "win32_common.h"
 #else
 #include <stdint.h>
+#include <stdbool.h>
 #endif
 
-void RAND_bytes (uint8_t *dst, int len);
+#include <stdlib.h>
 
-#endif /* RAND_H */
+typedef struct {
+  uint8_t *buf;
+  size_t len;
+} crc_data;
+
+
+uint32_t stun_crc32 (const crc_data *data, size_t n, bool wlm2009_stupid_crc32_typo);
+
+#endif /* _CRC32_H */

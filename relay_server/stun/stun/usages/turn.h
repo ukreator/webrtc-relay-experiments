@@ -52,7 +52,7 @@
  */
 
 
-#ifdef _WIN32
+#if defined(_MSC_VER)
 #  include "../win32_common.h"
 #else
 # include <stdbool.h>

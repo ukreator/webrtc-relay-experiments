@@ -15,7 +15,7 @@
 #ifndef MD5_H
 #define MD5_H
 
-#ifdef _WIN32
+#if defined(_MSC_VER)
 #include "win32_common.h"
 #else
 #include <stdint.h>

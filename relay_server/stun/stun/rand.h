@@ -1,10 +1,9 @@
 /*
  * This file is part of the Nice GLib ICE library.
  *
- * (C) 2006, 2007 Collabora Ltd.
- *  Contact: Dafydd Harries
- * (C) 2006, 2007 Nokia Corporation. All rights reserved.
- *  Contact: Rémi Denis-Courmont
+ * (C) 2008 Collabora Ltd. All rights reserved.
+ *  Contact: Youness Alaoui
+ * (C) 2008 Nokia Corporation. All rights reserved.
  *
  * The contents of this file are subject to the Mozilla Public License Version
  * 1.1 (the "License"); you may not use this file except in compliance with
@@ -22,7 +21,7 @@
  * Corporation. All Rights Reserved.
  *
  * Contributors:
- *   Rémi Denis-Courmont, Nokia
+ *   Youness Alaoui, Collabora Ltd.
  *
  * Alternatively, the contents of this file may be used under the terms of the
  * the GNU Lesser General Public License Version 2.1 (the "LGPL"), in which
@@ -36,33 +35,16 @@
  */
 
 
-#ifndef _STUN_5389_H
-#define _STUN_5389_H
+#ifndef RAND_H
+#define RAND_H
 
 
-#ifdef _WIN32
+#if defined(_MSC_VER)
 #include "win32_common.h"
 #else
-# include <stdint.h>
-# include <stdbool.h>
+#include <stdint.h>
 #endif
-# include <sys/types.h>
 
-#include "stunmessage.h"
-/*
- * Computes the FINGERPRINT checksum of a STUN message.
- * @param msg pointer to the STUN message
- * @param len size of the message from header (inclusive) and up to
- *            FINGERPRINT attribute (inclusive)
- *
- * @return fingerprint value in <b>host</b> byte order.
- */
-uint32_t stun_fingerprint (const uint8_t *msg, size_t len,
-    bool wlm2009_stupid_crc32_typo);
+void RAND_bytes (uint8_t *dst, int len);
 
-StunMessageReturn stun_message_append_software (StunMessage *msg,
-    const char *software);
-
-
-#endif /* _STUN_5389_H */
-
+#endif /* RAND_H */

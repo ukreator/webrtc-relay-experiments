@@ -1,0 +1,3 @@
+[submodule "relay_server/websocketpp"]
+	path = relay_server/websocketpp
+	url = git://github.com/zaphoyd/websocketpp.git

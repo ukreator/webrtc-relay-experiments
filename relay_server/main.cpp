@@ -292,11 +292,6 @@ public:
                 assert(false);
             }
         }
-        else if (msgType == "iceCandidate")
-        {
-            //unsigned short port = boost::lexical_cast<unsigned short>(root["data"]["port"].asString());
-            //std::string ipAddr = root["data"]["ipAddr"].asString();
-        }
         else
         {
             LOG_E("Unknown message type: " << msgType);
@@ -364,6 +359,7 @@ void run(boost::asio::io_service& ioService)
         std::cout << "other exception" << std::endl;
     }
 }
+
 
 int main()
 {
