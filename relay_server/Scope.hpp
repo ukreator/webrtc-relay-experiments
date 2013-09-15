@@ -5,7 +5,6 @@
 #include <SrtpSession.hpp>
 #include <User.hpp>
 
-#include <boost/foreach.hpp>
 #include <string>
 
 class Scope
@@ -19,12 +18,12 @@ public:
     {
         std::vector<std::pair<TransportEndpoint, SrtpSession> > endpoints;
         // enumerate all users in this room except uplink one
-        BOOST_FOREACH(UsersMap::value_type& u, _users)
+        for (auto& u: _users)
         {
             if (u.first != userId) //< exclude media source
             {
                 // search for userId in downlink connections for the specific user
-                User::DownlinksMap::iterator it = u.second->_downlinks.find(userId);
+                auto it = u.second->_downlinks.find(userId);
                 if (it != u.second->_downlinks.end())
                     endpoints.push_back(std::make_pair(it->second.transportEndpoint,
                         it->second.srtpStreamerSession));
@@ -40,7 +39,7 @@ public:
 
     UserPtr getUser(int userId)
     {
-        UsersMap::iterator it = _users.find(userId);
+        auto it = _users.find(userId);
         if (it != _users.end())
             return it->second;
         return UserPtr();

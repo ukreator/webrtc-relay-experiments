@@ -8,13 +8,11 @@
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
 #include <json/json.h>
-#include <boost/foreach.hpp>
-#include <boost/shared_ptr.hpp>
-#include <boost/make_shared.hpp>
-#include <boost/lexical_cast.hpp>
-#include <boost/random/mersenne_twister.hpp>
 #include <iostream>
 #include <set>
+#include <memory>
+#include <random>
+#include <functional>
 
 typedef websocketpp::server<websocketpp::config::asio> server;
 
@@ -96,10 +94,10 @@ public:
         int userId = params["userId"].asInt();
         std::string scopeId = params["scopeId"].asString();
 
-        IceCredentialsPtr iceCreds = boost::make_shared<IceCredentials>(boost::ref(_randomGenerator));
+        IceCredentialsPtr iceCreds = std::make_shared<IceCredentials>(std::ref(_randomGenerator));
         iceCreds->setRemoteCredentials(params["iceUfrag"].asString(),
             params["icePwd"].asString());
-        UserPtr user = boost::make_shared<User>(userId, scopeId);
+        UserPtr user = std::make_shared<User>(userId, scopeId);
 
         LinkInfo uplink;
         uplink.peerAudioSsrc = newSsrc();
@@ -144,7 +142,7 @@ public:
         sendJson(hdl, result);
 
         // notify other clients about current user connected
-        BOOST_FOREACH(SignalingMap::value_type& userPair, _signalingUsers)
+        for (SignalingMap::value_type& userPair: _signalingUsers)
         {
             if (userPair.first.lock().get() != hdl.lock().get())
             {
@@ -153,7 +151,7 @@ public:
         }
 
         // send info about users already present in current room to this user
-        BOOST_FOREACH(SignalingMap::value_type& userPair, _signalingUsers)
+        for (SignalingMap::value_type& userPair: _signalingUsers)
         {
             if (userPair.first.lock().get() != hdl.lock().get())
                 reportConnectedUser(hdl, userPair.second);
@@ -170,7 +168,7 @@ public:
             return;
         }
 
-        IceCredentialsPtr iceCreds = boost::make_shared<IceCredentials>(boost::ref(_randomGenerator));
+        auto iceCreds = std::make_shared<IceCredentials>(std::ref(_randomGenerator));
         iceCreds->setRemoteCredentials(params["iceUfrag"].asString(),
             params["icePwd"].asString());
 
@@ -197,7 +195,7 @@ public:
 
         user->_downlinks[senderUserId] = downlink;
         _udpServer->addLink(iceCreds->verifyingUname(), user,
-            MEDIA_LINK_TYPE_DOWNLINK, downlink.peerAudioSsrc, downlink.peerVideoSsrc,
+            MediaLinkType::MEDIA_LINK_TYPE_DOWNLINK, downlink.peerAudioSsrc, downlink.peerVideoSsrc,
             senderUserId, downlink.streamerVideoSsrc);
 
         result["type"] = "userEvent";
@@ -243,7 +241,7 @@ public:
         assert(senderUser);
 
         // notify other clients about media status
-        BOOST_FOREACH(SignalingMap::value_type& userPair, _signalingUsers)
+        for (SignalingMap::value_type& userPair: _signalingUsers)
         {
             if (userPair.first.lock().get() != hdl.lock().get())
             {
@@ -328,16 +326,19 @@ public:
         _server.start_accept();
     }
 private:
+    
+    typedef std::set<connection_hdl, std::owner_less<connection_hdl>> ConnectionSet;
+    typedef std::map<connection_hdl, UserPtr, std::owner_less<connection_hdl>> SignalingMap;
+
     server _server;
-    std::set<connection_hdl> _connections;
+    ConnectionSet _connections;
     unsigned _ssrcCounter;
 
     // for signaling connection mapping
-    typedef std::map<connection_hdl, UserPtr> SignalingMap;
     SignalingMap _signalingUsers;
     UdpServer* _udpServer;
 
-    boost::mt19937 _randomGenerator;
+    std::mt19937 _randomGenerator;
 };
 
 void run(boost::asio::io_service& ioService)
@@ -372,7 +373,7 @@ int main()
     udpServer.start(gServerPort);
     server.start(gSignalingPort);
 
-    boost::thread thr(bind(run, boost::ref(ioService)));
+    std::thread thr(std::bind(run, std::ref(ioService)));
     thr.join();
 
     LOG_D("server finished working");

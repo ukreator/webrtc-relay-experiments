@@ -14,7 +14,14 @@ add_subdirectory(jsoncpp)
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_STATIC_RUNTIME ON)
 set(Boost_USE_MULTITHREADED TRUE)
-find_package(Boost COMPONENTS date_time system thread regex chrono)
+
+if(NOT MSVC)
+   add_definitions(-D_WEBSOCKETPP_CPP11_STL_)
+    find_package(Boost COMPONENTS system)
+else()
+    find_package(Boost COMPONENTS date_time system thread regex chrono)
+endif()
+
 include_directories(${Boost_INCLUDE_DIRS})
 if(Boost_FOUND STREQUAL "FALSE")
     message(FATAL_ERROR "Boost not found")
@@ -46,6 +53,8 @@ target_link_libraries(relay_server
     libstun
     jsoncpp
     ${Boost_LIBRARIES}
+    ws2_32
+    mswsock
 )
 
 

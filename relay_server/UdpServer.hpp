@@ -7,16 +7,14 @@
 #include <stun/usages/ice.h>
 
 #include <boost/asio.hpp>
-#include <boost/array.hpp>
-#include <boost/thread.hpp>
-#include <boost/cstdint.hpp>
-
+#include <array>
+#include <thread>
 #include <set>
 #include <map>
 #include <string>
 
 
-class UdpServer: boost::noncopyable
+class UdpServer
 {
 public:
     UdpServer(boost::asio::io_service& ioService, const boost::asio::ip::address& listeningAddr);
@@ -70,7 +68,7 @@ private:
 	sm_uint16_t _port;
     boost::asio::ip::udp::socket _socket;
     boost::asio::ip::udp::endpoint _remoteEndpoint;
-    boost::array<char, 4000> _recvBuffer;
+    std::array<char, 4000> _recvBuffer;
     boost::asio::ip::address _listeningAddr;
 
     // STUN context to answer to connectivity checks

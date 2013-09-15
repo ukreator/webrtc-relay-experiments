@@ -2,7 +2,7 @@
 #define ___SrtpSession_hpp__
 
 #include <IntTypes.hpp>
-#include <boost/shared_ptr.hpp>
+#include <memory>
 #include <vector>
 
 struct srtp_ctx_t;
@@ -35,7 +35,7 @@ public:
 private:
 
     static void freeCtx(srtp_t* ctx);
-    boost::shared_ptr<srtp_t> _srtpCtx;    
+    std::shared_ptr<srtp_t> _srtpCtx;
 };
 
 #endif

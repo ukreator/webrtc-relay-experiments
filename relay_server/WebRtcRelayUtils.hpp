@@ -2,7 +2,7 @@
 #define ___WebRtcRelayUtils_hpp__
 
 #include <IntTypes.hpp>
-#include <boost/random/mersenne_twister.hpp>
+#include <random>
 #include <vector>
 
 enum RtcpType
@@ -24,13 +24,13 @@ enum RtcpType
  * section 15.1 (ID-16).
  * NOTE: modeled after nice_rng_generate_bytes_print() from libnice.
  */
-void generatePrintableBytes(size_t size, boost::mt19937& gen, std::vector<sm_uint8_t>* outBuf);
+void generatePrintableBytes(size_t size, std::mt19937& gen, std::vector<sm_uint8_t>* outBuf);
 
-void generateRandomBinaryVector(size_t size, boost::mt19937& gen, std::vector<sm_uint8_t>* outBuf);
+void generateRandomBinaryVector(size_t size, std::mt19937& gen, std::vector<sm_uint8_t>* outBuf);
 
-std::string generateKeySalt(boost::mt19937& gen);
+std::string generateKeySalt(std::mt19937& gen);
 
-std::vector<sm_uint8_t> defaultSizeKeySalt(boost::mt19937& gen);
+std::vector<sm_uint8_t> defaultSizeKeySalt(std::mt19937& gen);
 
 /**
  * Returns true if buffer @data of size @len has signatures of STUN packet (RFC 5389 only)

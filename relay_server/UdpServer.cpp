@@ -2,7 +2,8 @@
 #include <Scope.hpp>
 #include <WebRtcRelayUtils.hpp>
 #include <Log.hpp>
-#include <boost/foreach.hpp>
+#include <functional>
+
 
 extern Scope gGlobalScope;
 
@@ -40,7 +41,7 @@ void UdpServer::start(sm_uint16_t port)
 
 void UdpServer::stopAsync()
 {
-    _ioService.post(boost::bind(&UdpServer::stopInternal, this));
+    _ioService.post(std::bind(&UdpServer::stopInternal, this));
 }
 
 void UdpServer::stopInternal()
@@ -69,16 +70,17 @@ void UdpServer::startReceive()
 {
     _socket.async_receive_from(
         boost::asio::buffer(_recvBuffer), _remoteEndpoint,
-        boost::bind(&UdpServer::handleReceive, this,
-            boost::asio::placeholders::error,
-            boost::asio::placeholders::bytes_transferred));
+        std::bind(&UdpServer::handleReceive, this,
+            std::placeholders::_1,
+            std::placeholders::_2));
 }
 
 void UdpServer::addLink(const std::vector<sm_uint8_t>& iceUname, UserPtr user,
         MediaLinkType linkType, sm_uint32_t audioSsrc, sm_uint32_t videoSsrc,
         int downlinkUserId, sm_uint32_t downlinkUserPeerVideoSsrc)
 {
-    assert((linkType == MEDIA_LINK_TYPE_UPLINK) || (linkType == MEDIA_LINK_TYPE_DOWNLINK));
+    assert((linkType == MediaLinkType::MEDIA_LINK_TYPE_UPLINK)
+           || (linkType == MediaLinkType::MEDIA_LINK_TYPE_DOWNLINK));
     LinkHelper lh = {user, linkType, downlinkUserId, downlinkUserPeerVideoSsrc};
     _iceUnames.insert(std::make_pair(iceUname, lh));
 
@@ -92,12 +94,12 @@ void UdpServer::removeLink(const std::vector<sm_uint8_t>& uname)
     if (it != _iceUnames.end())
     {
         LinkHelper& lh = it->second;
-        if (lh.linkType == MEDIA_LINK_TYPE_UPLINK)
+        if (lh.linkType == MediaLinkType::MEDIA_LINK_TYPE_UPLINK)
         {
             _ssrcUsers.erase(lh.user->_uplink.peerAudioSsrc);
             _ssrcUsers.erase(lh.user->_uplink.peerVideoSsrc);
         }
-        if (lh.linkType == MEDIA_LINK_TYPE_DOWNLINK)
+        if (lh.linkType == MediaLinkType::MEDIA_LINK_TYPE_DOWNLINK)
         {
             LinkInfo& li = lh.user->_downlinks[lh.senderUserId];
             _ssrcUsers.erase(li.peerAudioSsrc);
@@ -112,7 +114,7 @@ void UdpServer::removeLink(const std::vector<sm_uint8_t>& uname)
 void UdpServer::addUser(UserPtr user)
 {
     addLink(user->_uplink.iceCredentials->verifyingUname(),
-        user, MEDIA_LINK_TYPE_UPLINK, user->_uplink.peerAudioSsrc,
+        user, MediaLinkType::MEDIA_LINK_TYPE_UPLINK, user->_uplink.peerAudioSsrc,
         user->_uplink.peerVideoSsrc, 0, 0);
 }
 
@@ -121,7 +123,7 @@ void UdpServer::removeUser(UserPtr user)
     removeLink(user->_uplink.iceCredentials->verifyingUname());
 
     // disposing all downlinks associated with this user
-    BOOST_FOREACH(User::DownlinksMap::value_type& v,
+    for (User::DownlinksMap::value_type& v:
         user->_downlinks)
     {
         removeLink(v.second.iceCredentials->verifyingUname());
@@ -215,7 +217,7 @@ void UdpServer::handleMediaPacket(sm_uint8_t* data, size_t size)
     if (!ssrc)
         return;
 
-    SsrcToUserMap::iterator it = _ssrcUsers.find(ssrc);
+    auto it = _ssrcUsers.find(ssrc);
     if (it == _ssrcUsers.end())
     {
         LOG_W("Unknown SSRC " << ssrc << " from " << _remoteEndpoint
@@ -230,7 +232,7 @@ void UdpServer::handleMediaPacket(sm_uint8_t* data, size_t size)
     // decode with original uplink SRTP context
     SrtpSession session;
 
-    if (it->second.linkType == MEDIA_LINK_TYPE_DOWNLINK)
+    if (it->second.linkType == MediaLinkType::MEDIA_LINK_TYPE_DOWNLINK)
     {
         session = user->_downlinks[it->second.senderUserId].srtpPeerSession;
     }
@@ -276,10 +278,10 @@ void UdpServer::handleMediaPacket(sm_uint8_t* data, size_t size)
 
 void UdpServer::broadcast(const UserPtr& uplinkUser, sm_uint8_t* data, size_t size)
 {
-    std::vector<std::pair<TransportEndpoint, SrtpSession> > endpoints =
+    auto endpoints =
         gGlobalScope.getDownlinkEndpointsFor(uplinkUser->_userId);
-    typedef std::pair<TransportEndpoint, SrtpSession> EP;
-    BOOST_FOREACH(EP& te, endpoints)
+
+    for (auto& te: endpoints)
     {
         if (!te.first.isSet())
         {
@@ -319,7 +321,7 @@ bool UdpServer::validateStunCredentials(StunAgent *agent,
     UdpServer* _this = (UdpServer*)userData;
 
     std::vector<sm_uint8_t> uname(username, username + usernameLen);
-    UserToLinkMap::iterator it = _this->_iceUnames.find(uname);
+    auto it = _this->_iceUnames.find(uname);
     if (it != _this->_iceUnames.end())
     {
         LinkHelper& lh = it->second;
@@ -372,7 +374,7 @@ void UdpServer::handleStunPacket(const sm_uint8_t* data, size_t size)
                     bool result = _iceUserRef.user->updateIceEndpoint(_iceUserRef.linkType,
                         _iceUserRef.senderUserId, te);
 
-                    if (result && _iceUserRef.linkType == MEDIA_LINK_TYPE_DOWNLINK)
+                    if (result && _iceUserRef.linkType == MediaLinkType::MEDIA_LINK_TYPE_DOWNLINK)
                     {
                         LOG_D("New donlink connection established. Requesting FIR for all other participants");
                         requestFir(_iceUserRef.senderVideoSsrc);

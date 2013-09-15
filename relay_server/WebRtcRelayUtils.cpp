@@ -2,8 +2,11 @@
 
 #include <stun/constants.h>
 
-#include <boost/random/uniform_int.hpp>
-#include <boost/random/variate_generator.hpp>
+#include <random>
+#include <assert.h>
+
+//#include <boost/random/uniform_int.hpp>
+//#include <boost/random/variate_generator.hpp>
 
 namespace
 {
@@ -16,7 +19,7 @@ const int gSrtpMasterSaltLen = 14;
 
 }
 
-void generatePrintableBytes(size_t size, boost::mt19937& gen, std::vector<sm_uint8_t>* outBuf)
+void generatePrintableBytes(size_t size, std::mt19937& gen, std::vector<sm_uint8_t>* outBuf)
 {
     outBuf->resize(size);
     const char chars[] =
@@ -25,33 +28,29 @@ void generatePrintableBytes(size_t size, boost::mt19937& gen, std::vector<sm_uin
         "0123456789"
         "+/";
 
-    boost::uniform_int<> dist(0, sizeof(chars) - 2);
-    boost::variate_generator<boost::mt19937&, boost::uniform_int<> > rndval(
-            gen, dist);
+    std::uniform_int_distribution<int> dist(0, sizeof(chars) - 2);
     
     for (size_t i = 0; i < size; ++i)
-      (*outBuf)[i] = chars[rndval()];
+      (*outBuf)[i] = chars[dist(gen)];
 }
 
-void generateRandomBinaryVector(size_t size, boost::mt19937& gen, std::vector<sm_uint8_t>* outBuf)
+void generateRandomBinaryVector(size_t size, std::mt19937& gen, std::vector<sm_uint8_t>* outBuf)
 {
     outBuf->resize(size);
-    boost::uniform_int<> dist(0, 255);
-    boost::variate_generator<boost::mt19937&, boost::uniform_int<> > rndval(
-            gen, dist);
+    std::uniform_int_distribution<int> dist(0, 255);
     
     for (size_t i = 0; i < size; ++i)
-      (*outBuf)[i] = rndval();
+      (*outBuf)[i] = dist(gen);
 }
 
-std::string generateKeySalt(boost::mt19937& gen)
+std::string generateKeySalt(std::mt19937& gen)
 {
     std::vector<sm_uint8_t> keySalt;
     generateRandomBinaryVector(gSrtpMasterKeyLen + gSrtpMasterSaltLen, gen, &keySalt);
     return base64Encode(&keySalt[0], keySalt.size());
 }
 
-std::vector<sm_uint8_t> defaultSizeKeySalt(boost::mt19937& gen)
+std::vector<sm_uint8_t> defaultSizeKeySalt(std::mt19937& gen)
 {
     std::vector<sm_uint8_t> keySalt;
     generateRandomBinaryVector(gSrtpMasterKeyLen + gSrtpMasterSaltLen, gen, &keySalt);

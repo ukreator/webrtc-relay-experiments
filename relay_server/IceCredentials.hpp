@@ -3,9 +3,11 @@
 
 #include <IntTypes.hpp>
 #include <WebRtcRelayUtils.hpp>
-#include <boost/shared_ptr.hpp>
+#include <memory>
 #include <vector>
 #include <string>
+#include <random>
+#include <assert.h>
 
 enum
 {
@@ -16,7 +18,7 @@ enum
 class IceCredentials
 {
 public:
-    explicit IceCredentials(boost::mt19937& gen)
+    explicit IceCredentials(std::mt19937& gen)
     {
         generateLocal(gen);
     }
@@ -73,7 +75,7 @@ public:
 
 private:
 
-    void generateLocal(boost::mt19937& gen)
+    void generateLocal(std::mt19937& gen)
     {
         generatePrintableBytes(ICE_DEFAULT_UFRAG_LEN, gen, &_localUfrag);
         generatePrintableBytes(ICE_DEFAULT_PWD_LEN, gen, &_localPwd);
@@ -86,6 +88,6 @@ private:
     std::vector<sm_uint8_t> _verifyingUname;
 };
 
-typedef boost::shared_ptr<IceCredentials> IceCredentialsPtr;
+typedef std::shared_ptr<IceCredentials> IceCredentialsPtr;
 
 #endif

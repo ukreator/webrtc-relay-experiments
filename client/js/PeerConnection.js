@@ -180,6 +180,7 @@
     var mgSdp = new ManageableSDP(self._nativePC.localDescription);
     mgSdp.mediaSections[mediaIndex].direction = directionOffer;
     mgSdp.flush();
+    log.debug("[PC] = Offer created for media component publish/unpublish: \r\n" + mgSdp.sdp);
 
     self._nativePC.setLocalDescription(mgSdp.toRtcSessionDescription(),
       function () {

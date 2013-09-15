@@ -1,9 +1,10 @@
 #include <SrtpSession.hpp>
 #include <Log.hpp>
 #include <srtp.h>
-#include <boost/shared_ptr.hpp>
-#include <boost/thread.hpp>
+#include <thread>
 #include <string>
+#include <mutex>
+#include <assert.h>
 
 const int SRTCP_INDEX_LEN = 4;
 const int SRTCP_MAX_TRAILER_LEN = SRTP_MAX_TRAILER_LEN + SRTCP_INDEX_LEN;
@@ -35,7 +36,7 @@ public:
 
     static void init()
     {
-        boost::call_once(_flag, initOnce);
+        std::call_once(_flag, initOnce);
     }
 
 private:
@@ -47,12 +48,12 @@ private:
 
     bool _initialized;
 
-    static boost::once_flag _flag;
-    static boost::shared_ptr<GlobalLibsrtpContext> _globalCtx;
+    static std::once_flag _flag;
+    static std::shared_ptr<GlobalLibsrtpContext> _globalCtx;
 };
 
-boost::once_flag GlobalLibsrtpContext::_flag;
-boost::shared_ptr<GlobalLibsrtpContext> GlobalLibsrtpContext::_globalCtx;
+std::once_flag GlobalLibsrtpContext::_flag;
+std::shared_ptr<GlobalLibsrtpContext> GlobalLibsrtpContext::_globalCtx;
 }
 
 SrtpSession::SrtpSession()
@@ -81,7 +82,7 @@ void SrtpSession::setKey(const std::vector<sm_uint8_t>& keySalt,
     err_status_t status = srtp_create(srtpCtx, &policy);
     // TODO: error handling
     assert(status == err_status_ok);
-    _srtpCtx = boost::shared_ptr<srtp_t>(srtpCtx, &SrtpSession::freeCtx);
+    _srtpCtx = std::shared_ptr<srtp_t>(srtpCtx, &SrtpSession::freeCtx);
 }
 
 size_t SrtpSession::protect(sm_uint8_t* data, size_t size)

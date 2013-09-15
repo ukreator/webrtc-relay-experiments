@@ -6,13 +6,12 @@
 #include <TransportEndpoint.hpp>
 #include <SrtpSession.hpp>
 #include <Log.hpp>
-#include <boost/shared_ptr.hpp>
-#include <boost/asio.hpp>
+#include <memory>
 #include <map>
 #include <string>
 
 
-enum MediaLinkType
+enum class MediaLinkType
 {
     MEDIA_LINK_TYPE_UPLINK,
     MEDIA_LINK_TYPE_DOWNLINK,
@@ -21,10 +20,7 @@ enum MediaLinkType
 
 struct LinkInfo
 {
-    LinkInfo(): peerAudioSsrc(0), peerVideoSsrc(0), streamerAudioSsrc(0), streamerVideoSsrc(0)
-    {}
-
-    boost::shared_ptr<IceCredentials> iceCredentials;
+    std::shared_ptr<IceCredentials> iceCredentials;
 
     std::vector<sm_uint8_t> peerKeySalt;
     std::vector<sm_uint8_t> streamerKeySalt;
@@ -32,10 +28,10 @@ struct LinkInfo
     SrtpSession srtpStreamerSession; // streamer -> peer
 
     TransportEndpoint transportEndpoint;
-    sm_uint32_t peerAudioSsrc;
-    sm_uint32_t peerVideoSsrc;
-    sm_uint32_t streamerAudioSsrc;
-    sm_uint32_t streamerVideoSsrc;
+    sm_uint32_t peerAudioSsrc = 0;
+    sm_uint32_t peerVideoSsrc = 0;
+    sm_uint32_t streamerAudioSsrc = 0;
+    sm_uint32_t streamerVideoSsrc = 0;
 };
 
 class User
@@ -50,11 +46,11 @@ public:
         sm_uint8_t **password, size_t *passwordLen)
     {
         IceCredentialsPtr icp;
-        if (linkType == MEDIA_LINK_TYPE_UPLINK)
+        if (linkType == MediaLinkType::MEDIA_LINK_TYPE_UPLINK)
         {
             icp = _uplink.iceCredentials;
         }
-        else if (linkType == MEDIA_LINK_TYPE_DOWNLINK)
+        else if (linkType == MediaLinkType::MEDIA_LINK_TYPE_DOWNLINK)
         {
             icp = _downlinks[downlinkUserId].iceCredentials;
         }
@@ -69,7 +65,7 @@ public:
     bool updateIceEndpoint(MediaLinkType linkType, int downlinkUserId,
         const TransportEndpoint& te)
     {
-        if (linkType == MEDIA_LINK_TYPE_UPLINK)
+        if (linkType == MediaLinkType::MEDIA_LINK_TYPE_UPLINK)
         {
             if (!_uplink.transportEndpoint.isSet())
             {
@@ -78,7 +74,7 @@ public:
                 return true;
             }
         }
-        else if (linkType == MEDIA_LINK_TYPE_DOWNLINK)
+        else if (linkType == MediaLinkType::MEDIA_LINK_TYPE_DOWNLINK)
         {
             if (!_downlinks[downlinkUserId].transportEndpoint.isSet())
             {
@@ -108,6 +104,6 @@ public:
     DownlinksMap _downlinks;
 };
 
-typedef boost::shared_ptr<User> UserPtr;
+typedef std::shared_ptr<User> UserPtr;
 
 #endif

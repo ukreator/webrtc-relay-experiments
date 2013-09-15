@@ -71,7 +71,8 @@ CA = {};
 
   CA.toggleVideo = function () {
     CA.videoEnabled = !CA.videoEnabled;
-    CA.uplinkConnection.changeMediaStatus(1, CA.videoEnabled);
+    CA.selectedDevsSet.getVideoTracks()[0].enabled = CA.videoEnabled;
+    //CA.uplinkConnection.changeMediaStatus(1, CA.videoEnabled);
     CA.RealtimeTransport.mediaPublishStatus(CA.ownClientId, true, CA.videoEnabled);
   };
 
@@ -113,7 +114,7 @@ CA = {};
 
   function _onRemoteUserMediaStatus(msg) {
     log.debug('Handling publish/unpublish event from remote user');
-    // TODO: offer-answer adjustment, renderer disposing
+    // TODO: offer-answer adjustment (not quite safe), renderer disposing
   }
 
   /**
